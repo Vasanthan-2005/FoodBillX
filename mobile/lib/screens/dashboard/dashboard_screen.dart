@@ -6,7 +6,6 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/widgets/metric_card_widget.dart';
 import '../../core/widgets/skeleton_loader.dart';
-import '../../core/widgets/error_state_widget.dart';
 import '../../core/widgets/empty_state_widget.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -40,7 +39,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              settings?.businessName ?? 'FoodBillX POS',
+              settings?.businessName ?? 'HMB Bills',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const Text(
@@ -78,25 +77,51 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ],
                 ),
               )
-            : dashboardState.errorMessage != null
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                children: [
-                  ErrorStateWidget(
-                    title: 'Unable to load insights',
-                    message: dashboardState.errorMessage!,
-                    onRetry: () =>
-                        ref.read(dashboardProvider.notifier).refresh(),
-                  ),
-                ],
-              )
             : SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (dashboardState.errorMessage != null)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withAlpha(25),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.orange),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.wifi_off_rounded,
+                              color: Colors.orange,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                dashboardState.errorMessage!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => ref
+                                  .read(dashboardProvider.notifier)
+                                  .refresh(forceSpinner: true),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
                     // Timeframe Segmented Switcher
                     Row(
                       children: [
@@ -155,9 +180,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: MetricCardWidget(
                             title: "$_selectedTimeframe Sales",
                             value: CurrencyFormatter.format(
-                              _selectedTimeframe == 'Monthly'
-                                  ? dashboardState.monthRevenue
-                                  : dashboardState.todayRevenue,
+                              switch (_selectedTimeframe) {
+                                'Monthly' => dashboardState.monthRevenue,
+                                'Weekly' => dashboardState.weekRevenue,
+                                _ => dashboardState.todayRevenue,
+                              },
                             ),
                             icon: Icons.payments_rounded,
                             color: AppColors.secondary,
@@ -168,7 +195,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         Expanded(
                           child: MetricCardWidget(
                             title: "$_selectedTimeframe Orders",
-                            value: '${dashboardState.todayOrderCount}',
+                            value:
+                                '${switch (_selectedTimeframe) {
+                                  'Monthly' => dashboardState.monthOrderCount,
+                                  'Weekly' => dashboardState.weekOrderCount,
+                                  _ => dashboardState.todayOrderCount,
+                                }}',
                             icon: Icons.receipt_long_rounded,
                             color: AppColors.primary,
                             subtitle: "Volume",
@@ -182,7 +214,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       children: [
                         Expanded(
                           child: MetricCardWidget(
-                            title: "Recorded Expenses",
+                            title: "Today's Expenses",
                             value: CurrencyFormatter.format(
                               dashboardState.todayExpenseTotal,
                             ),
@@ -194,7 +226,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: MetricCardWidget(
-                            title: "Net Profit",
+                            title: "Today's Net Profit",
                             value: CurrencyFormatter.format(
                               dashboardState.netProfitToday,
                             ),
@@ -226,9 +258,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       // Sales Trend Line Chart Card
                       _buildChartCard(
                         context,
-                        title: 'Sales & Revenue Trend ($_selectedTimeframe)',
+                        title: 'Recent Sales Trend',
                         subtitle:
-                            'Historical sales growth and hourly billing activity',
+                            'Local revenue totals for the last seven days',
                         child: SizedBox(
                           height: 180,
                           child: CustomPaint(
@@ -236,6 +268,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               isDark: isDark,
                               primaryColor: AppColors.primary,
                               accentColor: AppColors.secondary,
+                              values: dashboardState.recentDailyRevenue,
                             ),
                           ),
                         ),
@@ -382,11 +415,13 @@ class SalesTrendPainter extends CustomPainter {
   final bool isDark;
   final Color primaryColor;
   final Color accentColor;
+  final List<double> values;
 
   SalesTrendPainter({
     required this.isDark,
     required this.primaryColor,
     required this.accentColor,
+    required this.values,
   });
 
   @override
@@ -400,14 +435,14 @@ class SalesTrendPainter extends CustomPainter {
       canvas.drawLine(Offset(0, i), Offset(size.width, i), gridPaint);
     }
 
-    final dataPoints = [
-      Offset(0, size.height * 0.8),
-      Offset(size.width * 0.2, size.height * 0.6),
-      Offset(size.width * 0.4, size.height * 0.75),
-      Offset(size.width * 0.6, size.height * 0.3),
-      Offset(size.width * 0.8, size.height * 0.45),
-      Offset(size.width, size.height * 0.15),
-    ];
+    if (values.isEmpty) return;
+    final maxValue = values.reduce(math.max);
+    final divisor = maxValue <= 0 ? 1.0 : maxValue;
+    final step = values.length == 1 ? 0.0 : size.width / (values.length - 1);
+    final dataPoints = List<Offset>.generate(values.length, (index) {
+      final normalized = values[index] / divisor;
+      return Offset(index * step, size.height * (1 - normalized * 0.85));
+    });
 
     final path = Path()..moveTo(dataPoints[0].dx, dataPoints[0].dy);
     for (int i = 1; i < dataPoints.length; i++) {
@@ -463,7 +498,8 @@ class SalesTrendPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant SalesTrendPainter oldDelegate) =>
+      oldDelegate.values != values || oldDelegate.isDark != isDark;
 }
 
 // Custom Painter for Revenue vs Expenses Bar Chart
@@ -508,5 +544,8 @@ class RevenueExpenseBarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant RevenueExpenseBarPainter oldDelegate) =>
+      oldDelegate.revenue != revenue ||
+      oldDelegate.expense != expense ||
+      oldDelegate.isDark != isDark;
 }

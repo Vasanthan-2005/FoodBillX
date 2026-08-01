@@ -1,143 +1,76 @@
-import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
+import '../api/api_client.dart';
+import '../api/api_response_parser.dart';
+import '../api/local_cache_service.dart';
+import '../core/constants/api_endpoints.dart';
+import '../models/expense_model.dart';
 
-import '../local_db/isar_database.dart';
-import '../local_db/schemas/expense_schema.dart';
-import '../local_db/schemas/sync_enums.dart';
-import '../local_db/schemas/sync_operation_schema.dart';
-
-/// Repository for expense records.
 class ExpenseRepository {
-  final Isar _isar;
+  final ApiClient _apiClient;
+  static const String _cacheKey = 'expenses';
 
-  ExpenseRepository(this._isar);
+  ExpenseRepository(this._apiClient);
 
-  // ── Read ──────────────────────────────────────────────────────
-
-  Future<List<ExpenseSchema>> getAll({
+  Future<List<ExpenseModel>> getAll({
     DateTime? startDate,
     DateTime? endDate,
     String? category,
   }) async {
-    var results = await _isar.expenseSchemas.where().sortByDateDesc().findAll();
-
+    final queryParams = <String, dynamic>{};
     if (category != null && category.isNotEmpty) {
-      results = results.where((e) => e.category == category).toList();
+      queryParams['category'] = category;
     }
     if (startDate != null) {
-      results = results
-          .where(
-            (e) =>
-                e.date.isAfter(startDate) || e.date.isAtSameMomentAs(startDate),
-          )
-          .toList();
+      queryParams['startDate'] = startDate.toIso8601String();
     }
     if (endDate != null) {
-      results = results
-          .where(
-            (e) => e.date.isBefore(endDate) || e.date.isAtSameMomentAs(endDate),
-          )
-          .toList();
+      queryParams['endDate'] = endDate.toIso8601String();
     }
 
-    return results;
+    dynamic data;
+    try {
+      final response = await _apiClient.dio.get(
+        ApiEndpoints.expenses,
+        queryParameters: queryParams,
+      );
+      data = response.data;
+      if (queryParams.isEmpty) {
+        await LocalCacheService.saveCache(_cacheKey, data);
+      }
+    } catch (_) {
+      if (queryParams.isEmpty) {
+        data = await LocalCacheService.getCache(_cacheKey);
+      }
+    }
+
+    final rawList = ApiResponseParser.extractList(data, ['expenses']);
+    return rawList
+        .map((item) => ExpenseModel.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
   }
 
-  Stream<List<ExpenseSchema>> watchAll() {
-    return _isar.expenseSchemas.where().sortByDateDesc().watch(
-      fireImmediately: true,
+  Future<ExpenseModel> create(Map<String, dynamic> data) async {
+    final response = await _apiClient.dio.post(
+      ApiEndpoints.expenses,
+      data: data,
     );
+    final item = ApiResponseParser.extractMap(response.data, ['expense']);
+    return ExpenseModel.fromJson(item);
   }
 
-  /// Get today's total expenses for the dashboard.
+  Future<void> delete(String id) async {
+    await _apiClient.dio.delete('${ApiEndpoints.expenses}/$id');
+  }
+
   Future<double> getTodayTotal() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
-
-    final expenses = await _isar.expenseSchemas
-        .filter()
-        .dateBetween(startOfDay, endOfDay, includeUpper: false)
-        .findAll();
-
+    final expenses = await getAll(startDate: startOfDay, endDate: endOfDay);
     return expenses.fold<double>(0.0, (sum, e) => sum + e.amount);
-  }
-
-  // ── Write ─────────────────────────────────────────────────────
-
-  Future<ExpenseSchema> create(Map<String, dynamic> data) async {
-    final now = DateTime.now();
-    final schema = ExpenseSchema()
-      ..category = data['category'] ?? 'Miscellaneous'
-      ..title = data['title'] ?? data['category'] ?? ''
-      ..amount = (data['amount'] as num?)?.toDouble() ?? 0.0
-      ..date = data['date'] != null
-          ? (data['date'] is DateTime
-                ? data['date']
-                : DateTime.tryParse(data['date'].toString()) ?? now)
-          : now
-      ..notes = data['notes'] ?? ''
-      ..syncStatus = SyncStatus.pending
-      ..updatedAt = now
-      ..createdAt = now;
-
-    await _isar.writeTxn(() async {
-      await _isar.expenseSchemas.put(schema);
-
-      // Serialise date to ISO string for backend
-      final payload = Map<String, dynamic>.from(data);
-      if (payload['date'] is DateTime) {
-        payload['date'] = (payload['date'] as DateTime).toIso8601String();
-      }
-
-      final op = SyncOperationSchema()
-        ..entityType = SyncEntityType.expense
-        ..operationType = SyncOperationType.create
-        ..localId = schema.id
-        ..payload = jsonEncode(payload)
-        ..createdAt = now
-        ..retryCount = 0;
-      await _isar.syncOperationSchemas.put(op);
-    });
-
-    return schema;
-  }
-
-  Future<void> delete(String idOrServerId) async {
-    final schema = await _findByIdOrServerId(idOrServerId);
-    if (schema == null) return;
-
-    final now = DateTime.now();
-    await _isar.writeTxn(() async {
-      await _isar.expenseSchemas.delete(schema.id);
-
-      if (schema.serverId != null) {
-        final op = SyncOperationSchema()
-          ..entityType = SyncEntityType.expense
-          ..operationType = SyncOperationType.delete
-          ..localId = schema.id
-          ..serverId = schema.serverId
-          ..payload = '{}'
-          ..createdAt = now
-          ..retryCount = 0;
-        await _isar.syncOperationSchemas.put(op);
-      }
-    });
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────
-
-  Future<ExpenseSchema?> _findByIdOrServerId(String idStr) async {
-    final intId = int.tryParse(idStr);
-    if (intId != null) {
-      final byId = await _isar.expenseSchemas.get(intId);
-      if (byId != null) return byId;
-    }
-    return _isar.expenseSchemas.filter().serverIdEqualTo(idStr).findFirst();
   }
 }
 
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
-  return ExpenseRepository(ref.watch(isarProvider));
+  return ExpenseRepository(ref.watch(apiClientProvider));
 });

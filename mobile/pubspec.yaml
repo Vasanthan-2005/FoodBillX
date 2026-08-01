@@ -1,5 +1,5 @@
 name: mobile
-description: "FoodBillX - Food Truck Billing System"
+description: "HMB Bills - Honeymoon Biryani POS System"
 publish_to: "none"
 
 version: 1.0.0+1
@@ -25,13 +25,6 @@ dependencies:
   dio: ^5.8.0+1
   shared_preferences: ^2.5.2
 
-  # Local Database (Offline-First)
-  isar: ^3.1.0+1
-  isar_flutter_libs: ^3.1.0+1
-
-  # Connectivity
-  connectivity_plus: ^6.1.4
-
   # Date, Time & Utilities
   intl: ^0.20.2
   uuid: ^4.5.1
@@ -49,9 +42,6 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
-
-  # Code Generation for Isar
-  isar_generator: ^3.1.0+1
   build_runner: ^2.4.12
 
 flutter:
@@ -60,9 +50,3 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
-
-  # Fonts (We'll add custom fonts later if needed)
-  # fonts:
-  #   - family: Poppins
-  #     fonts:
-  #       - asset: assets/fonts/Poppins-Regular.ttf

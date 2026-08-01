@@ -1,13 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../core/sync/sync_status_notifier.dart';
-import '../local_db/schemas/expense_category_schema.dart';
-import '../local_db/schemas/expense_schema.dart';
+import '../models/expense_category_model.dart';
+import '../models/expense_model.dart';
 import '../repositories/expense_category_repository.dart';
 import '../repositories/expense_repository.dart';
 
 class ExpenseState {
-  final List<ExpenseSchema> expenses;
-  final List<ExpenseCategorySchema> categories;
+  final List<ExpenseModel> expenses;
+  final List<ExpenseCategoryModel> categories;
   final String? selectedCategory;
   final bool isLoading;
   final String? errorMessage;
@@ -23,8 +22,8 @@ class ExpenseState {
   factory ExpenseState.initial() => ExpenseState(expenses: [], categories: []);
 
   ExpenseState copyWith({
-    List<ExpenseSchema>? expenses,
-    List<ExpenseCategorySchema>? categories,
+    List<ExpenseModel>? expenses,
+    List<ExpenseCategoryModel>? categories,
     String? selectedCategory,
     bool clearCategory = false,
     bool? isLoading,
@@ -45,15 +44,16 @@ class ExpenseState {
 class ExpenseNotifier extends StateNotifier<ExpenseState> {
   final ExpenseRepository _expenseRepo;
   final ExpenseCategoryRepository _catRepo;
-  final SyncStatusNotifier _syncStatus;
 
-  ExpenseNotifier(this._expenseRepo, this._catRepo, this._syncStatus)
+  ExpenseNotifier(this._expenseRepo, this._catRepo)
     : super(ExpenseState.initial()) {
     loadAll();
   }
 
-  Future<void> loadAll() async {
-    state = state.copyWith(isLoading: true, errorMessage: null);
+  Future<void> loadAll({bool forceSpinner = false}) async {
+    final showLoading = forceSpinner || state.expenses.isEmpty;
+    state = state.copyWith(isLoading: showLoading, errorMessage: null);
+
     try {
       final expenses = await _expenseRepo.getAll(
         category: state.selectedCategory,
@@ -67,7 +67,9 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: e.toString().replaceAll('Exception: ', ''),
+        errorMessage: state.expenses.isEmpty
+            ? e.toString().replaceAll('Exception: ', '')
+            : null,
       );
     }
   }
@@ -84,8 +86,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
   Future<bool> createExpense(Map<String, dynamic> data) async {
     try {
       await _expenseRepo.create(data);
-      await loadAll();
-      _syncStatus.refreshPending();
+      await loadAll(forceSpinner: false);
       return true;
     } catch (_) {
       return false;
@@ -95,8 +96,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
   Future<bool> deleteExpense(String id) async {
     try {
       await _expenseRepo.delete(id);
-      await loadAll();
-      _syncStatus.refreshPending();
+      await loadAll(forceSpinner: false);
       return true;
     } catch (_) {
       return false;
@@ -106,8 +106,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
   Future<bool> createExpenseCategory(String name, String icon) async {
     try {
       await _catRepo.create(name, icon);
-      await loadAll();
-      _syncStatus.refreshPending();
+      await loadAll(forceSpinner: false);
       return true;
     } catch (_) {
       return false;
@@ -117,8 +116,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
   Future<bool> deleteExpenseCategory(String id) async {
     try {
       await _catRepo.delete(id);
-      await loadAll();
-      _syncStatus.refreshPending();
+      await loadAll(forceSpinner: false);
       return true;
     } catch (_) {
       return false;
@@ -131,6 +129,5 @@ final expenseProvider = StateNotifierProvider<ExpenseNotifier, ExpenseState>((
 ) {
   final expenseRepo = ref.watch(expenseRepositoryProvider);
   final catRepo = ref.watch(expenseCategoryRepositoryProvider);
-  final syncStatus = ref.watch(syncStatusProvider.notifier);
-  return ExpenseNotifier(expenseRepo, catRepo, syncStatus);
+  return ExpenseNotifier(expenseRepo, catRepo);
 });

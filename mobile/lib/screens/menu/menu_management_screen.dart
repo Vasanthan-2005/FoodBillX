@@ -54,8 +54,34 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
     final categories = ref.read(menuProvider).categories;
 
     if (existingItem == null && categories.isEmpty) {
-      SnackbarUtils.showError(context, 'Please create a food category first.');
-      _showCategoryManagerSheet();
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'No Food Categories Found',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            'Please create at least one food category (e.g. Beverages, Rolls, Main Course) before adding food items.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showCategoryManagerSheet();
+              },
+              child: const Text('Create Category'),
+            ),
+          ],
+        ),
+      );
       return;
     }
 
@@ -788,6 +814,13 @@ class _CategoryManagerSheetState extends ConsumerState<_CategoryManagerSheet> {
                 ),
               ),
               ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 38),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                ),
                 onPressed: () => _showAddEditDialog(),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add'),

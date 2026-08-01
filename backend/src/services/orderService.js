@@ -8,8 +8,7 @@ class OrderService {
   async generateOrderNumber() {
     const settings = await BusinessSettings.findOne();
     const prefix = settings?.invoicePrefix || 'INV-';
-    const count = await Order.countDocuments();
-    return `${prefix}${1001 + count}`;
+    return `${prefix}${Date.now().toString(36).toUpperCase()}`;
   }
 
   async createOrder(orderData) {
@@ -19,22 +18,33 @@ class OrderService {
       throw new AppError('Order must contain at least one item', 400);
     }
 
+    const itemIds = items.map((item) => item.menuItem).filter(Boolean);
+    const [dbItems, settings] = await Promise.all([
+      MenuItem.find({ _id: { $in: itemIds } }),
+      BusinessSettings.findOne(),
+    ]);
+    const itemsById = new Map(dbItems.map((item) => [item._id.toString(), item]));
+
     let calculatedSubtotal = 0;
     let calculatedGst = 0;
+    let itemDiscountTotal = 0;
     const processedItems = [];
 
     for (const item of items) {
-      const dbItem = await MenuItem.findById(item.menuItem);
+      const dbItem = itemsById.get(item.menuItem?.toString());
       if (!dbItem) {
         throw new AppError(`Menu item ${item.name || item.menuItem} not found`, 404);
       }
       const price = dbItem.price;
       const quantity = item.quantity || 1;
       const itemSubtotal = price * quantity;
+      const itemDiscount = Math.min(dbItem.discount || 0, price) * quantity;
+      const itemNet = itemSubtotal - itemDiscount;
       const gstPercentage = dbItem.gstPercentage || 5.0;
 
       calculatedSubtotal += itemSubtotal;
-      calculatedGst += (itemSubtotal * gstPercentage) / 100;
+      itemDiscountTotal += itemDiscount;
+      calculatedGst += (itemNet * gstPercentage) / 100;
 
       processedItems.push({
         menuItem: dbItem._id,
@@ -42,14 +52,26 @@ class OrderService {
         price,
         quantity,
         gstPercentage,
-        subtotal: itemSubtotal,
+        subtotal: itemNet,
         notes: item.notes || '',
       });
     }
 
-    const subtotalAfterDiscount = Math.max(0, calculatedSubtotal - discountAmount);
-    const grandTotal = Math.round(subtotalAfterDiscount + calculatedGst);
-    const orderNumber = await this.generateOrderNumber();
+    const totalDiscount = itemDiscountTotal + discountAmount;
+    const subtotalAfterDiscount = Math.max(0, calculatedSubtotal - totalDiscount);
+    const subtotalAfterItemDiscount = calculatedSubtotal - itemDiscountTotal;
+    if (subtotalAfterItemDiscount > 0) {
+      calculatedGst *= subtotalAfterDiscount / subtotalAfterItemDiscount;
+    } else {
+      calculatedGst = 0;
+    }
+    const serviceChargePercentage = settings?.serviceChargePercentage || 0;
+    const serviceChargeAmount =
+      subtotalAfterDiscount * serviceChargePercentage / 100;
+    const grandTotal = Math.round(
+      subtotalAfterDiscount + calculatedGst + serviceChargeAmount
+    );
+    const orderNumber = orderData.orderNumber || await this.generateOrderNumber();
 
     const order = await Order.create({
       orderNumber,
@@ -58,8 +80,9 @@ class OrderService {
       customerPhone: customerPhone || '',
       items: processedItems,
       subtotal: calculatedSubtotal,
-      discountAmount,
+      discountAmount: totalDiscount,
       gstAmount: calculatedGst,
+      serviceChargeAmount,
       grandTotal,
       paymentMethod,
       paymentStatus: 'paid',

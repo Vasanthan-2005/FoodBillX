@@ -64,6 +64,11 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0.0,
     },
+    serviceChargeAmount: {
+      type: Number,
+      default: 0.0,
+      min: 0,
+    },
     grandTotal: {
       type: Number,
       required: true,

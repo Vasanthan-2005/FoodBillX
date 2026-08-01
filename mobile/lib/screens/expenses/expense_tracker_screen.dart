@@ -8,7 +8,7 @@ import '../../core/widgets/empty_state_widget.dart';
 import '../../core/widgets/error_state_widget.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../providers/expense_provider.dart';
-import '../../local_db/schemas/expense_category_schema.dart';
+import '../../models/expense_category_model.dart';
 
 // ── Screen ────────────────────────────────────────────────────────────
 class ExpenseTrackerScreen extends ConsumerStatefulWidget {
@@ -22,7 +22,7 @@ class ExpenseTrackerScreen extends ConsumerStatefulWidget {
 
 class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
   // ── Add Expense Dialog ────────────────────────────────────────────
-  void _showAddExpenseDialog(List<ExpenseCategorySchema> categories) {
+  void _showAddExpenseDialog(List<ExpenseCategoryModel> categories) {
     final amountController = TextEditingController();
     String selectedCategory = categories.isNotEmpty
         ? categories.first.name
@@ -291,7 +291,7 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
                     final category = exp.category;
                     final amount = exp.amount;
                     final dateStr = exp.date;
-                    final idStr = exp.serverId ?? exp.id.toString();
+                    final idStr = exp.id;
 
                     return Dismissible(
                       key: Key(idStr),
@@ -539,7 +539,7 @@ class _ExpenseCategorySheetState extends ConsumerState<_ExpenseCategorySheet> {
                       const Divider(height: 1),
                   itemBuilder: (ctx, i) {
                     final cat = cats[i];
-                    final catId = cat.serverId ?? cat.id.toString();
+                    final catId = cat.id;
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.red.withAlpha(30),

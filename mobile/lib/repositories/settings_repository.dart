@@ -1,119 +1,41 @@
-import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
-
-import '../local_db/isar_database.dart';
-import '../local_db/schemas/business_settings_schema.dart';
-import '../local_db/schemas/sync_enums.dart';
-import '../local_db/schemas/sync_operation_schema.dart';
+import '../api/api_client.dart';
+import '../api/api_response_parser.dart';
+import '../api/local_cache_service.dart';
+import '../core/constants/api_endpoints.dart';
 import '../models/business_settings_model.dart';
 
-/// Repository for business settings (singleton document).
 class SettingsRepository {
-  final Isar _isar;
+  final ApiClient _apiClient;
+  static const String _cacheKey = 'settings';
 
-  SettingsRepository(this._isar);
-
-  // ── Read ──────────────────────────────────────────────────────
+  SettingsRepository(this._apiClient);
 
   Future<BusinessSettingsModel?> get() async {
-    final schema = await _isar.businessSettingsSchemas.get(1);
-    if (schema == null) return null;
-    return _toModel(schema);
-  }
-
-  Stream<BusinessSettingsModel?> watch() {
-    return _isar.businessSettingsSchemas
-        .watchObject(1, fireImmediately: true)
-        .map((s) => s != null ? _toModel(s) : null);
-  }
-
-  // ── Write ─────────────────────────────────────────────────────
-
-  Future<BusinessSettingsModel> upsert(Map<String, dynamic> data) async {
-    final now = DateTime.now();
-    var schema = await _isar.businessSettingsSchemas.get(1);
-
-    if (schema == null) {
-      schema = BusinessSettingsSchema()
-        ..businessName = data['businessName'] ?? 'My Food Outlet'
-        ..logo = data['logo'] ?? ''
-        ..phone = data['phone'] ?? ''
-        ..address = data['address'] ?? ''
-        ..gstin = data['gstin'] ?? ''
-        ..currency = data['currency'] ?? '₹'
-        ..invoicePrefix = data['invoicePrefix'] ?? 'INV-'
-        ..taxPercentage = (data['taxPercentage'] as num?)?.toDouble() ?? 5.0
-        ..serviceChargePercentage =
-            (data['serviceChargePercentage'] as num?)?.toDouble() ?? 0.0
-        ..invoiceFooter =
-            data['invoiceFooter'] ?? 'Thank you for dining with us!'
-        ..syncStatus = SyncStatus.pending
-        ..updatedAt = now;
-    } else {
-      if (data.containsKey('businessName')) {
-        schema.businessName = data['businessName'];
-      }
-      if (data.containsKey('logo')) schema.logo = data['logo'];
-      if (data.containsKey('phone')) schema.phone = data['phone'];
-      if (data.containsKey('address')) schema.address = data['address'];
-      if (data.containsKey('gstin')) schema.gstin = data['gstin'];
-      if (data.containsKey('currency')) schema.currency = data['currency'];
-      if (data.containsKey('invoicePrefix')) {
-        schema.invoicePrefix = data['invoicePrefix'];
-      }
-      if (data.containsKey('taxPercentage')) {
-        schema.taxPercentage = (data['taxPercentage'] as num).toDouble();
-      }
-      if (data.containsKey('serviceChargePercentage')) {
-        schema.serviceChargePercentage =
-            (data['serviceChargePercentage'] as num).toDouble();
-      }
-      if (data.containsKey('invoiceFooter')) {
-        schema.invoiceFooter = data['invoiceFooter'];
-      }
-      schema
-        ..syncStatus = SyncStatus.pending
-        ..updatedAt = now;
+    dynamic data;
+    try {
+      final response = await _apiClient.dio.get(ApiEndpoints.settings);
+      data = response.data;
+      await LocalCacheService.saveCache(_cacheKey, data);
+    } catch (_) {
+      data = await LocalCacheService.getCache(_cacheKey);
     }
 
-    await _isar.writeTxn(() async {
-      await _isar.businessSettingsSchemas.put(schema!);
-
-      final op = SyncOperationSchema()
-        ..entityType = SyncEntityType.settings
-        ..operationType = schema.serverId != null
-            ? SyncOperationType.update
-            : SyncOperationType.create
-        ..localId = schema.id
-        ..serverId = schema.serverId
-        ..payload = jsonEncode(data)
-        ..createdAt = now
-        ..retryCount = 0;
-      await _isar.syncOperationSchemas.put(op);
-    });
-
-    return _toModel(schema);
+    final rawItem = ApiResponseParser.extractMap(data, ['settings']);
+    if (rawItem.isEmpty) return null;
+    return BusinessSettingsModel.fromJson(rawItem);
   }
 
-  // ── Helpers ───────────────────────────────────────────────────
-
-  BusinessSettingsModel _toModel(BusinessSettingsSchema s) {
-    return BusinessSettingsModel(
-      id: s.serverId ?? s.id.toString(),
-      businessName: s.businessName,
-      logo: s.logo,
-      phone: s.phone,
-      address: s.address,
-      gstin: s.gstin,
-      currency: s.currency,
-      invoicePrefix: s.invoicePrefix,
-      taxPercentage: s.taxPercentage,
-      serviceChargePercentage: s.serviceChargePercentage,
+  Future<BusinessSettingsModel> upsert(Map<String, dynamic> data) async {
+    final response = await _apiClient.dio.put(
+      ApiEndpoints.settings,
+      data: data,
     );
+    final rawItem = ApiResponseParser.extractMap(response.data, ['settings']);
+    return BusinessSettingsModel.fromJson(rawItem);
   }
 }
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
-  return SettingsRepository(ref.watch(isarProvider));
+  return SettingsRepository(ref.watch(apiClientProvider));
 });

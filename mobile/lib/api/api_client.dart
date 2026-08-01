@@ -9,8 +9,8 @@ class ApiClient {
     dio = Dio(
       BaseOptions(
         baseUrl: ApiEndpoints.baseUrl,
-        connectTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 8),
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -20,6 +20,10 @@ class ApiClient {
 
     dio.interceptors.add(
       InterceptorsWrapper(
+        onRequest: (options, handler) {
+          options.baseUrl = ApiEndpoints.baseUrl;
+          return handler.next(options);
+        },
         onError: (DioException error, handler) {
           String errorMessage = 'Unable to connect to server.';
           if (error.response != null) {
@@ -32,10 +36,11 @@ class ApiClient {
             }
           } else if (error.type == DioExceptionType.connectionTimeout ||
               error.type == DioExceptionType.receiveTimeout) {
-            errorMessage = 'Connection timed out. Please check your network.';
+            errorMessage =
+                'Connection timed out. Using offline cache. You can check server IP in settings.';
           } else if (error.type == DioExceptionType.connectionError ||
               error.type == DioExceptionType.unknown) {
-            errorMessage = 'Unable to connect to server. Offline mode active.';
+            errorMessage = 'Unable to connect to server. Offline cache active.';
           }
 
           final customError = DioException(

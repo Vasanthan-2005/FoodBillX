@@ -1,21 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
-import 'local_db/isar_database.dart';
+import 'core/constants/api_endpoints.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Open the local Isar database before starting the app.
-  final isar = await IsarDatabase.initialize();
+  await ApiEndpoints.initSavedServerUrl();
 
   runApp(
-    ProviderScope(
-      overrides: [
-        // Make the Isar instance available globally.
-        isarProvider.overrideWithValue(isar),
-      ],
-      child: const FoodBillXApp(),
+    const ProviderScope(
+      child: FoodBillXApp(),
     ),
   );
 }

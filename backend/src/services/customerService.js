@@ -1,5 +1,6 @@
 const Customer = require('../models/Customer');
 const AppError = require('../utils/appError');
+const recordSyncDeletion = require('../utils/recordSyncDeletion');
 
 class CustomerService {
   async getCustomers(query = {}) {
@@ -48,6 +49,7 @@ class CustomerService {
   async deleteCustomer(customerId) {
     const customer = await Customer.findByIdAndDelete(customerId);
     if (!customer) throw new AppError('Customer not found', 404);
+    await recordSyncDeletion('customer', customer._id);
     return { message: 'Customer deleted successfully' };
   }
 

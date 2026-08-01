@@ -9,6 +9,7 @@ class BusinessSettingsModel {
   final String invoicePrefix;
   final double taxPercentage;
   final double serviceChargePercentage;
+  final String invoiceFooter;
 
   BusinessSettingsModel({
     required this.id,
@@ -21,6 +22,7 @@ class BusinessSettingsModel {
     required this.invoicePrefix,
     required this.taxPercentage,
     required this.serviceChargePercentage,
+    required this.invoiceFooter,
   });
 
   factory BusinessSettingsModel.fromJson(Map<String, dynamic> json) {
@@ -36,6 +38,7 @@ class BusinessSettingsModel {
       taxPercentage: (json['taxPercentage'] as num?)?.toDouble() ?? 5.0,
       serviceChargePercentage:
           (json['serviceChargePercentage'] as num?)?.toDouble() ?? 0.0,
+      invoiceFooter: json['invoiceFooter'] ?? 'Thank you for dining with us!',
     );
   }
 
@@ -50,6 +53,7 @@ class BusinessSettingsModel {
       'invoicePrefix': invoicePrefix,
       'taxPercentage': taxPercentage,
       'serviceChargePercentage': serviceChargePercentage,
+      'invoiceFooter': invoiceFooter,
     };
   }
 }

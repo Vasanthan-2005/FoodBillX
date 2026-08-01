@@ -1,15 +1,24 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../core/sync/order_number_generator.dart';
-import '../core/sync/sync_status_notifier.dart';
 import '../core/utils/pdf_invoice_helper.dart';
-import '../local_db/isar_database.dart';
-import '../local_db/schemas/order_schema.dart';
 import '../models/cart_item_model.dart';
 import '../models/menu_item_model.dart';
-import '../repositories/customer_repository.dart';
+import '../models/order_model.dart';
 import '../repositories/order_repository.dart';
 import 'settings_provider.dart';
+
+class CheckoutResult {
+  final String orderNumber;
+  final File? invoiceFile;
+  final String? warning;
+
+  const CheckoutResult({
+    required this.orderNumber,
+    this.invoiceFile,
+    this.warning,
+  });
+}
 
 class BillingState {
   final List<CartItem> cartItems;
@@ -18,6 +27,7 @@ class BillingState {
   final String? customerId;
   final String paymentMethod;
   final double discountAmount;
+  final double serviceChargePercentage;
   final bool isSubmitting;
   final String? errorMessage;
 
@@ -28,6 +38,7 @@ class BillingState {
     this.customerId,
     this.paymentMethod = 'cash',
     this.discountAmount = 0.0,
+    this.serviceChargePercentage = 0.0,
     this.isSubmitting = false,
     this.errorMessage,
   });
@@ -35,7 +46,10 @@ class BillingState {
   factory BillingState.initial() => BillingState(cartItems: []);
 
   double get subtotal {
-    return cartItems.fold(0.0, (sum, item) => sum + item.subtotal);
+    return cartItems.fold(
+      0.0,
+      (sum, item) => sum + item.menuItem.price * item.quantity,
+    );
   }
 
   double get totalDiscount {
@@ -51,17 +65,25 @@ class BillingState {
     return res < 0 ? 0 : res;
   }
 
-  // Calculate GST using per-item gstPercentage
   double get gstAmount {
-    return cartItems.fold(0.0, (sum, item) {
+    final itemNetSubtotal =
+        subtotal -
+        cartItems.fold(0.0, (sum, item) => sum + item.discountAmount);
+    if (itemNetSubtotal <= 0 || subtotalAfterDiscount <= 0) return 0;
+    final taxBeforeOrderDiscount = cartItems.fold(0.0, (sum, item) {
       final itemNet = item.menuItem.finalPrice * item.quantity;
       return sum + (itemNet * item.menuItem.gstPercentage / 100);
     });
+    return taxBeforeOrderDiscount * subtotalAfterDiscount / itemNetSubtotal;
   }
 
   double get grandTotal {
-    return (subtotalAfterDiscount + gstAmount).roundToDouble();
+    return (subtotalAfterDiscount + gstAmount + serviceChargeAmount)
+        .roundToDouble();
   }
+
+  double get serviceChargeAmount =>
+      subtotalAfterDiscount * serviceChargePercentage / 100;
 
   int get totalItemCount {
     return cartItems.fold(0, (sum, item) => sum + item.quantity);
@@ -75,6 +97,7 @@ class BillingState {
     bool clearCustomer = false,
     String? paymentMethod,
     double? discountAmount,
+    double? serviceChargePercentage,
     bool? isSubmitting,
     String? errorMessage,
   }) {
@@ -87,6 +110,8 @@ class BillingState {
       customerId: clearCustomer ? null : (customerId ?? this.customerId),
       paymentMethod: paymentMethod ?? this.paymentMethod,
       discountAmount: discountAmount ?? this.discountAmount,
+      serviceChargePercentage:
+          serviceChargePercentage ?? this.serviceChargePercentage,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       errorMessage: errorMessage,
     );
@@ -95,16 +120,10 @@ class BillingState {
 
 class BillingNotifier extends StateNotifier<BillingState> {
   final OrderRepository _orderRepo;
-  final CustomerRepository _customerRepo;
-  final OrderNumberGenerator _orderNumGen;
-  final SyncStatusNotifier _syncStatus;
   final Ref _ref;
 
   BillingNotifier(
     this._orderRepo,
-    this._customerRepo,
-    this._orderNumGen,
-    this._syncStatus,
     this._ref,
   ) : super(BillingState.initial());
 
@@ -113,7 +132,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
       (c) => c.menuItem.id == item.id,
     );
     if (existingIndex >= 0) {
-      // Create a brand-new immutable list with the updated CartItem
       final updatedItems = List<CartItem>.from(state.cartItems);
       updatedItems[existingIndex] = updatedItems[existingIndex].copyWith(
         quantity: updatedItems[existingIndex].quantity + 1,
@@ -146,7 +164,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
         if (item.quantity > 1) {
           list.add(item.copyWith(quantity: item.quantity - 1));
         }
-        // quantity == 1 → remove from cart
       } else {
         list.add(item);
       }
@@ -175,82 +192,99 @@ class BillingNotifier extends StateNotifier<BillingState> {
     state = state.copyWith(discountAmount: discount);
   }
 
-  void clearCart() {
-    state = BillingState.initial();
+  void setServiceChargePercentage(double percentage) {
+    state = state.copyWith(serviceChargePercentage: percentage);
   }
 
-  /// Checkout: saves order locally (instant), generates PDF, queues sync.
-  Future<File?> checkoutAndGenerateInvoice() async {
+  void clearCart() {
+    state = BillingState(
+      cartItems: const [],
+      serviceChargePercentage: state.serviceChargePercentage,
+    );
+  }
+
+  String _generateOrderNumber(String prefix) {
+    final now = DateTime.now();
+    final dateStr =
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    final rand = Random().nextInt(9000) + 1000;
+    return '$prefix$dateStr-$rand';
+  }
+
+  Future<CheckoutResult?> checkoutAndGenerateInvoice() async {
     if (state.cartItems.isEmpty) return null;
     state = state.copyWith(isSubmitting: true, errorMessage: null);
 
     try {
+      final checkout = state;
       final settings = _ref.read(settingsProvider).settings;
       final prefix = settings?.invoicePrefix ?? 'INV-';
 
-      // 1. Generate order number locally.
-      final orderNumber = await _orderNumGen.generate(prefix);
+      final orderNumber = _generateOrderNumber(prefix);
 
-      // 2. Build embedded order items.
-      final items = state.cartItems.map((ci) {
-        return OrderItemEmbedded()
-          ..menuItemServerId = ci.menuItem.id
-          ..name = ci.menuItem.name
-          ..price = ci.menuItem.price
-          ..quantity = ci.quantity
-          ..gstPercentage = ci.menuItem.gstPercentage
-          ..subtotal = ci.subtotal
-          ..notes = ci.notes;
+      final items = checkout.cartItems.map((ci) {
+        return OrderItemModel(
+          menuItemId: ci.menuItem.id,
+          name: ci.menuItem.name,
+          price: ci.menuItem.price,
+          quantity: ci.quantity,
+          gstPercentage: ci.menuItem.gstPercentage,
+          subtotal: ci.subtotal,
+          notes: ci.notes,
+        );
       }).toList();
 
-      // 3. Save order to Isar (instant — no network needed).
       await _orderRepo.create(
         orderNumber: orderNumber,
-        customerServerId: state.customerId,
-        customerName: state.customerName,
-        customerPhone: state.customerPhone,
+        customerServerId: checkout.customerId,
+        customerName: checkout.customerName,
+        customerPhone: checkout.customerPhone,
         items: items,
-        subtotal: state.subtotal,
-        discountAmount: state.totalDiscount,
-        gstAmount: state.gstAmount,
-        grandTotal: state.grandTotal,
-        paymentMethod: state.paymentMethod,
+        subtotal: checkout.subtotal,
+        discountAmount: checkout.totalDiscount,
+        gstAmount: checkout.gstAmount,
+        serviceChargeAmount: checkout.serviceChargeAmount,
+        grandTotal: checkout.grandTotal,
+        paymentMethod: checkout.paymentMethod,
       );
 
-      // 4. Update customer visit stats locally (if linked).
-      if (state.customerId != null) {
-        await _customerRepo.recordVisit(state.customerId!, state.grandTotal);
-      }
-
-      // 5. Generate PDF invoice (pure local operation).
-      final pdfFile = await PdfInvoiceHelper.generateInvoicePdf(
-        businessName: settings?.businessName ?? 'Food Truck Outlet',
-        businessPhone: settings?.phone ?? '',
-        businessAddress: settings?.address ?? '',
-        gstin: settings?.gstin ?? '',
-        invoicePrefix: prefix,
-        orderNumber: orderNumber,
-        orderDate: DateTime.now(),
-        customerName: state.customerName,
-        customerPhone: state.customerPhone,
-        items: state.cartItems.map((i) {
-          return {
-            'name': i.menuItem.name,
-            'price': i.menuItem.price,
-            'quantity': i.quantity,
-            'subtotal': i.subtotal,
-          };
-        }).toList(),
-        subtotal: state.subtotal,
-        discount: state.totalDiscount,
-        gstAmount: state.gstAmount,
-        grandTotal: state.grandTotal,
-        paymentMethod: state.paymentMethod,
-      );
-
-      _syncStatus.refreshPending();
       clearCart();
-      return pdfFile;
+
+      try {
+        final pdfFile = await PdfInvoiceHelper.generateInvoicePdf(
+          businessName: settings?.businessName ?? 'Food Truck Outlet',
+          businessPhone: settings?.phone ?? '',
+          businessAddress: settings?.address ?? '',
+          gstin: settings?.gstin ?? '',
+          invoicePrefix: prefix,
+          invoiceFooter:
+              settings?.invoiceFooter ?? 'Thank you for dining with us!',
+          orderNumber: orderNumber,
+          orderDate: DateTime.now(),
+          customerName: checkout.customerName,
+          customerPhone: checkout.customerPhone,
+          items: checkout.cartItems.map((i) {
+            return {
+              'name': i.menuItem.name,
+              'price': i.menuItem.price,
+              'quantity': i.quantity,
+              'subtotal': i.subtotal,
+            };
+          }).toList(),
+          subtotal: checkout.subtotal,
+          discount: checkout.totalDiscount,
+          gstAmount: checkout.gstAmount,
+          serviceChargeAmount: checkout.serviceChargeAmount,
+          grandTotal: checkout.grandTotal,
+          paymentMethod: checkout.paymentMethod,
+        );
+        return CheckoutResult(orderNumber: orderNumber, invoiceFile: pdfFile);
+      } catch (error) {
+        return CheckoutResult(
+          orderNumber: orderNumber,
+          warning: 'Order saved, but the PDF invoice could not be generated.',
+        );
+      }
     } catch (e) {
       state = state.copyWith(
         isSubmitting: false,
@@ -265,9 +299,18 @@ final billingProvider = StateNotifierProvider<BillingNotifier, BillingState>((
   ref,
 ) {
   final orderRepo = ref.watch(orderRepositoryProvider);
-  final customerRepo = ref.watch(customerRepositoryProvider);
-  final isar = ref.watch(isarProvider);
-  final syncStatus = ref.watch(syncStatusProvider.notifier);
-  final orderNumGen = OrderNumberGenerator(isar);
-  return BillingNotifier(orderRepo, customerRepo, orderNumGen, syncStatus, ref);
+  final notifier = BillingNotifier(
+    orderRepo,
+    ref,
+  );
+  final initialServiceCharge =
+      ref.read(settingsProvider).settings?.serviceChargePercentage ?? 0;
+  notifier.setServiceChargePercentage(initialServiceCharge);
+  ref.listen<double>(
+    settingsProvider.select(
+      (state) => state.settings?.serviceChargePercentage ?? 0,
+    ),
+    (_, next) => notifier.setServiceChargePercentage(next),
+  );
+  return notifier;
 });

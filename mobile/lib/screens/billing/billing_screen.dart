@@ -28,27 +28,43 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     super.dispose();
   }
 
+  static final Map<String, String> _emojiCache = {};
+
   String _getItemEmoji(String name, bool isVeg) {
+    final key = '$name-$isVeg';
+    if (_emojiCache.containsKey(key)) return _emojiCache[key]!;
+
     final lower = name.toLowerCase();
-    if (lower.contains('burger')) return '🍔';
-    if (lower.contains('pizza')) return '🍕';
-    if (lower.contains('biryani') || lower.contains('rice')) return '🍚';
-    if (lower.contains('roll') || lower.contains('wrap')) return '🌯';
-    if (lower.contains('fries')) return '🍟';
-    if (lower.contains('drink') ||
+    String emoji;
+    if (lower.contains('burger')) {
+      emoji = '🍔';
+    } else if (lower.contains('pizza')) {
+      emoji = '🍕';
+    } else if (lower.contains('biryani') || lower.contains('rice')) {
+      emoji = '🍚';
+    } else if (lower.contains('roll') || lower.contains('wrap')) {
+      emoji = '🌯';
+    } else if (lower.contains('fries')) {
+      emoji = '🍟';
+    } else if (lower.contains('drink') ||
         lower.contains('tea') ||
         lower.contains('coffee') ||
         lower.contains('soda')) {
-      return '🥤';
-    }
-    if (lower.contains('ice') ||
+      emoji = '🥤';
+    } else if (lower.contains('ice') ||
         lower.contains('dessert') ||
         lower.contains('cake')) {
-      return '🍨';
+      emoji = '🍨';
+    } else if (lower.contains('chicken') || lower.contains('meat')) {
+      emoji = '🍗';
+    } else if (lower.contains('paneer') || isVeg) {
+      emoji = '🥗';
+    } else {
+      emoji = '🍽';
     }
-    if (lower.contains('chicken') || lower.contains('meat')) return '🍗';
-    if (lower.contains('paneer') || isVeg) return '🥗';
-    return '🍽';
+
+    _emojiCache[key] = emoji;
+    return emoji;
   }
 
   void _showCheckoutBottomSheet() {
@@ -226,12 +242,28 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('GST Tax (5%):'),
+                              const Text('GST Tax:'),
                               Text(
                                 CurrencyFormatter.format(cartState.gstAmount),
                               ),
                             ],
                           ),
+                          if (cartState.serviceChargeAmount > 0) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Service Charge (${cartState.serviceChargePercentage.toStringAsFixed(1)}%):',
+                                ),
+                                Text(
+                                  CurrencyFormatter.format(
+                                    cartState.serviceChargeAmount,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                           const Divider(height: 20),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -266,46 +298,55 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       onPressed: cartState.isSubmitting
                           ? null
                           : () async {
-                              final pdfFile = await notifier
+                              final result = await notifier
                                   .checkoutAndGenerateInvoice();
                               if (context.mounted) Navigator.pop(ctx);
 
-                              if (pdfFile != null && context.mounted) {
-                                SnackbarUtils.showSuccess(
-                                  context,
-                                  'Order Placed! PDF Invoice Generated.',
-                                );
+                              if (result != null && context.mounted) {
+                                if (result.warning == null) {
+                                  SnackbarUtils.showSuccess(
+                                    context,
+                                    'Order Placed! PDF Invoice Generated.',
+                                  );
+                                } else {
+                                  SnackbarUtils.showWarning(
+                                    context,
+                                    result.warning!,
+                                  );
+                                }
 
-                                showDialog(
-                                  context: context,
-                                  builder: (dialogCtx) => AlertDialog(
-                                    title: const Text(
-                                      'Share Invoice via WhatsApp?',
-                                    ),
-                                    content: const Text(
-                                      'Would you like to share the digital PDF invoice now?',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(dialogCtx),
-                                        child: const Text('Skip'),
+                                if (result.invoiceFile != null) {
+                                  showDialog(
+                                    context: context,
+                                    builder: (dialogCtx) => AlertDialog(
+                                      title: const Text(
+                                        'Share Invoice via WhatsApp?',
                                       ),
-                                      ElevatedButton.icon(
-                                        icon: const Icon(Icons.share),
-                                        label: const Text('Share WhatsApp'),
-                                        onPressed: () {
-                                          Navigator.pop(dialogCtx);
-                                          PdfInvoiceHelper.shareInvoiceViaWhatsApp(
-                                            pdfFile,
-                                            cartState.customerPhone,
-                                            'POS Bill',
-                                          );
-                                        },
+                                      content: const Text(
+                                        'Would you like to share the digital PDF invoice now?',
                                       ),
-                                    ],
-                                  ),
-                                );
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(dialogCtx),
+                                          child: const Text('Skip'),
+                                        ),
+                                        ElevatedButton.icon(
+                                          icon: const Icon(Icons.share),
+                                          label: const Text('Share WhatsApp'),
+                                          onPressed: () {
+                                            Navigator.pop(dialogCtx);
+                                            PdfInvoiceHelper.shareInvoiceViaWhatsApp(
+                                              result.invoiceFile!,
+                                              cartState.customerPhone,
+                                              'POS Bill',
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
                               } else if (context.mounted) {
                                 SnackbarUtils.showError(
                                   context,
@@ -323,7 +364,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                               ),
                             )
                           : Text(
-                              'CONFIRM & PRINT BILL (${CurrencyFormatter.format(cartState.grandTotal)})',
+                              'CONFIRM & SAVE BILL (${CurrencyFormatter.format(cartState.grandTotal)})',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,

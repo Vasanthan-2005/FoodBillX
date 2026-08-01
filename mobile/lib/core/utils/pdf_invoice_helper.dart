@@ -11,6 +11,7 @@ class PdfInvoiceHelper {
     required String businessAddress,
     required String gstin,
     required String invoicePrefix,
+    String invoiceFooter = 'Thank you for dining with us!',
     required String orderNumber,
     required DateTime orderDate,
     required String customerName,
@@ -19,6 +20,7 @@ class PdfInvoiceHelper {
     required double subtotal,
     required double discount,
     required double gstAmount,
+    double serviceChargeAmount = 0,
     required double grandTotal,
     required String paymentMethod,
   }) async {
@@ -153,6 +155,19 @@ class PdfInvoiceHelper {
                             pw.Text('+ ₹${gstAmount.toStringAsFixed(2)}'),
                           ],
                         ),
+                        if (serviceChargeAmount > 0) ...[
+                          pw.SizedBox(height: 4),
+                          pw.Row(
+                            mainAxisAlignment:
+                                pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Text('Service charge:'),
+                              pw.Text(
+                                '+ ₹${serviceChargeAmount.toStringAsFixed(2)}',
+                              ),
+                            ],
+                          ),
+                        ],
                         pw.Divider(),
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -186,7 +201,7 @@ class PdfInvoiceHelper {
                 child: pw.Column(
                   children: [
                     pw.Text(
-                      'Thank you for dining with us!',
+                      invoiceFooter,
                       style: pw.TextStyle(
                         fontWeight: pw.FontWeight.bold,
                         fontSize: 14,
@@ -194,7 +209,7 @@ class PdfInvoiceHelper {
                     ),
                     pw.SizedBox(height: 4),
                     pw.Text(
-                      'FoodBillX Mobile POS Engine',
+                      'HMB Bills POS Engine',
                       style: const pw.TextStyle(
                         fontSize: 10,
                         color: PdfColors.grey600,

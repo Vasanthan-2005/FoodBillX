@@ -8,12 +8,16 @@ class PinAuthState {
   final String currentInput;
   final String? tempCreatedPin;
   final String? errorMessage;
+  final int failedAttempts;
+  final DateTime? lockedUntil;
 
   PinAuthState({
     required this.mode,
     this.currentInput = '',
     this.tempCreatedPin,
     this.errorMessage,
+    this.failedAttempts = 0,
+    this.lockedUntil,
   });
 
   factory PinAuthState.initial() => PinAuthState(mode: PinFlowMode.checking);
@@ -25,6 +29,9 @@ class PinAuthState {
     bool clearTempPin = false,
     String? errorMessage,
     bool clearError = false,
+    int? failedAttempts,
+    DateTime? lockedUntil,
+    bool clearLock = false,
   }) {
     return PinAuthState(
       mode: mode ?? this.mode,
@@ -33,6 +40,8 @@ class PinAuthState {
           ? null
           : (tempCreatedPin ?? this.tempCreatedPin),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      failedAttempts: failedAttempts ?? this.failedAttempts,
+      lockedUntil: clearLock ? null : (lockedUntil ?? this.lockedUntil),
     );
   }
 }
@@ -58,6 +67,21 @@ class PinAuthNotifier extends StateNotifier<PinAuthState> {
   }
 
   void appendDigit(String digit) {
+    final lock = state.lockedUntil;
+    if (lock != null && DateTime.now().isBefore(lock)) {
+      final seconds = lock.difference(DateTime.now()).inSeconds + 1;
+      state = state.copyWith(
+        errorMessage: 'Too many attempts. Try again in $seconds seconds.',
+      );
+      return;
+    }
+    if (lock != null) {
+      state = state.copyWith(
+        clearLock: true,
+        failedAttempts: 0,
+        clearError: true,
+      );
+    }
     if (state.currentInput.length >= 4) return;
     final newInput = state.currentInput + digit;
     state = state.copyWith(currentInput: newInput, clearError: true);
@@ -104,9 +128,17 @@ class PinAuthNotifier extends StateNotifier<PinAuthState> {
       if (isCorrect) {
         state = PinAuthState(mode: PinFlowMode.unlocked);
       } else {
+        final attempts = state.failedAttempts + 1;
+        final shouldLock = attempts >= 5;
         state = state.copyWith(
           currentInput: '',
-          errorMessage: 'Incorrect PIN. Try again.',
+          failedAttempts: attempts,
+          lockedUntil: shouldLock
+              ? DateTime.now().add(const Duration(seconds: 30))
+              : null,
+          errorMessage: shouldLock
+              ? 'Too many incorrect attempts. Locked for 30 seconds.'
+              : 'Incorrect PIN. Try again.',
         );
       }
     }

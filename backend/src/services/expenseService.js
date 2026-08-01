@@ -1,5 +1,6 @@
 const Expense = require('../models/Expense');
 const AppError = require('../utils/appError');
+const recordSyncDeletion = require('../utils/recordSyncDeletion');
 
 class ExpenseService {
   async getExpenses(query = {}) {
@@ -31,6 +32,7 @@ class ExpenseService {
   async deleteExpense(expenseId) {
     const expense = await Expense.findByIdAndDelete(expenseId);
     if (!expense) throw new AppError('Expense record not found', 404);
+    await recordSyncDeletion('expense', expense._id);
     return { message: 'Expense record deleted' };
   }
 }

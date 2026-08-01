@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -7,7 +8,6 @@ import '../../core/widgets/empty_state_widget.dart';
 import '../../core/widgets/error_state_widget.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../providers/orders_provider.dart';
-import '../../local_db/schemas/order_schema.dart';
 
 class OrdersScreen extends ConsumerStatefulWidget {
   final VoidCallback onOpenSettings;
@@ -19,13 +19,36 @@ class OrdersScreen extends ConsumerStatefulWidget {
 
 class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+  Timer? _debounceTimer;
   String _searchQuery = '';
   String _selectedPaymentFilter = 'ALL';
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(() {
+      if (_scrollController.position.extentAfter < 300) {
+        ref.read(ordersProvider.notifier).loadMore();
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _debounceTimer?.cancel();
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String val) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) {
+        setState(() => _searchQuery = val.trim().toLowerCase());
+      }
+    });
   }
 
   @override
@@ -55,8 +78,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
             child: TextField(
               controller: _searchController,
-              onChanged: (val) =>
-                  setState(() => _searchQuery = val.trim().toLowerCase()),
+              onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: 'Search by Order ID or customer...',
                 prefixIcon: const Icon(Icons.search_rounded),
@@ -64,6 +86,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded),
                         onPressed: () {
+                          _debounceTimer?.cancel();
                           _searchController.clear();
                           setState(() => _searchQuery = '');
                         },
@@ -91,8 +114,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                       color: isSelected ? Colors.white : null,
                       fontWeight: FontWeight.bold,
                     ),
-                    onSelected: (_) =>
-                        setState(() => _selectedPaymentFilter = method),
+                    onSelected: (_) {
+                      setState(() => _selectedPaymentFilter = method);
+                      ref
+                          .read(ordersProvider.notifier)
+                          .loadOrders(
+                            paymentMethod: method == 'ALL'
+                                ? null
+                                : method.toLowerCase(),
+                          );
+                    },
                   ),
                 );
               }).toList(),
@@ -117,14 +148,15 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     onRetry: () =>
                         ref.read(ordersProvider.notifier).loadOrders(),
                   )
-                : _buildOrdersList(ordersState.orders, isDark),
+                : _buildOrdersList(ordersState, isDark),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildOrdersList(List<OrderSchema> orders, bool isDark) {
+  Widget _buildOrdersList(OrdersState ordersState, bool isDark) {
+    final orders = ordersState.orders;
     final filtered = orders.where((order) {
       final orderNum = order.orderNumber.toLowerCase();
       final customer = order.customerName.toLowerCase();
@@ -148,10 +180,20 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      itemCount: filtered.length,
-      itemBuilder: (ctx, index) {
+    return RefreshIndicator(
+      onRefresh: () => ref.read(ordersProvider.notifier).loadOrders(forceSpinner: true),
+      child: ListView.builder(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        itemCount: filtered.length + (ordersState.isLoadingMore ? 1 : 0),
+        itemBuilder: (ctx, index) {
+        if (index == filtered.length) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
         final order = filtered[index];
         final orderNum = order.orderNumber;
         final customerName = order.customerName;
@@ -241,6 +283,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           ),
         ).animate().fadeIn(delay: (index * 25).ms);
       },
-    );
+    ),
+  );
   }
 }

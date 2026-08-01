@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/constants/api_endpoints.dart';
 import '../../core/constants/app_colors.dart';
-import '../../core/sync/connectivity_service.dart';
-import '../../core/sync/sync_service.dart';
-import '../../core/sync/sync_status_notifier.dart';
 import '../../core/utils/snackbar_utils.dart';
+import '../../providers/customer_provider.dart';
+import '../../providers/dashboard_provider.dart';
+import '../../providers/menu_provider.dart';
 import '../../providers/pin_auth_provider.dart';
 import '../../providers/settings_provider.dart';
 
@@ -24,6 +25,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _currencyController;
   late TextEditingController _prefixController;
   late TextEditingController _taxController;
+  late TextEditingController _serviceChargeController;
+  late TextEditingController _footerController;
+  bool _didPopulateSettings = false;
 
   @override
   void initState() {
@@ -42,6 +46,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _taxController = TextEditingController(
       text: settings?.taxPercentage.toString() ?? '5.0',
     );
+    _serviceChargeController = TextEditingController(
+      text: settings?.serviceChargePercentage.toString() ?? '0.0',
+    );
+    _footerController = TextEditingController(
+      text: settings?.invoiceFooter ?? 'Thank you for dining with us!',
+    );
+    _didPopulateSettings = settings != null;
+  }
+
+  void _populateSettings(SettingsState state) {
+    final settings = state.settings;
+    if (_didPopulateSettings || settings == null) return;
+    _didPopulateSettings = true;
+    _nameController.text = settings.businessName;
+    _phoneController.text = settings.phone;
+    _addressController.text = settings.address;
+    _gstinController.text = settings.gstin;
+    _currencyController.text = settings.currency;
+    _prefixController.text = settings.invoicePrefix;
+    _taxController.text = settings.taxPercentage.toString();
+    _serviceChargeController.text = settings.serviceChargePercentage.toString();
+    _footerController.text = settings.invoiceFooter;
   }
 
   @override
@@ -53,6 +79,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _currencyController.dispose();
     _prefixController.dispose();
     _taxController.dispose();
+    _serviceChargeController.dispose();
+    _footerController.dispose();
     super.dispose();
   }
 
@@ -67,6 +95,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       'currency': _currencyController.text.trim(),
       'invoicePrefix': _prefixController.text.trim(),
       'taxPercentage': double.tryParse(_taxController.text) ?? 5.0,
+      'serviceChargePercentage':
+          double.tryParse(_serviceChargeController.text) ?? 0.0,
+      'invoiceFooter': _footerController.text.trim(),
     };
 
     final ok = await ref
@@ -133,7 +164,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 final newPin = newPinController.text.trim();
                 final confirmPin = confirmPinController.text.trim();
 
-                if (oldPin.length != 4 || newPin.length != 4) {
+                final pinPattern = RegExp(r'^\d{4}$');
+                if (!pinPattern.hasMatch(oldPin) ||
+                    !pinPattern.hasMatch(newPin)) {
                   SnackbarUtils.showError(context, 'PIN must be 4 digits');
                   return;
                 }
@@ -160,15 +193,113 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         );
       },
+    ).whenComplete(() {
+      oldPinController.dispose();
+      newPinController.dispose();
+      confirmPinController.dispose();
+    });
+  }
+
+  void _showServerConfigDialog() {
+    final controller = TextEditingController(text: ApiEndpoints.baseUrl);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Backend Server Connection',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter the backend server URL or IP address of your host machine running FoodBillX backend:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Server Base URL / IP',
+                hintText: 'http://192.168.0.176:5000/api/v1',
+                prefixIcon: Icon(Icons.dns_rounded),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Quick Presets:',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ActionChip(
+                  label: const Text('Wi-Fi LAN IP (192.168.0.176)'),
+                  onPressed: () {
+                    controller.text = ApiEndpoints.defaultLanIp;
+                  },
+                ),
+                ActionChip(
+                  label: const Text('Emulator (10.0.2.2)'),
+                  onPressed: () {
+                    controller.text = ApiEndpoints.emulatorIp;
+                  },
+                ),
+                ActionChip(
+                  label: const Text('Localhost (127.0.0.1)'),
+                  onPressed: () {
+                    controller.text = ApiEndpoints.localhostIp;
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newUrl = controller.text.trim();
+              Navigator.pop(ctx);
+              await ApiEndpoints.saveCustomServerUrl(newUrl);
+              if (mounted) {
+                SnackbarUtils.showSuccess(
+                  context,
+                  'Server URL updated to $newUrl',
+                );
+                ref
+                    .read(menuProvider.notifier)
+                    .loadCategoriesAndItems(forceSpinner: true);
+                ref
+                    .read(customerProvider.notifier)
+                    .loadCustomers(forceSpinner: true);
+                ref
+                    .read(dashboardProvider.notifier)
+                    .refresh(forceSpinner: true);
+                ref.read(settingsProvider.notifier).loadSettings();
+              }
+            },
+            child: const Text('Save & Connect'),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<SettingsState>(settingsProvider, (_, next) {
+      _populateSettings(next);
+    });
     final state = ref.watch(settingsProvider);
-    final syncStatus = ref.watch(syncStatusProvider);
-    final isOnlineAsync = ref.watch(isOnlineProvider);
-    final isOnline = isOnlineAsync.asData?.value ?? false;
+    _populateSettings(state);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -181,119 +312,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Offline-First & Sync Status Section
-                    Text(
-                      'Offline-First & Cloud Sync',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: isOnline
-                                        ? Colors.green
-                                        : Colors.orange,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  isOnline
-                                      ? 'Online (Connected)'
-                                      : 'Offline Mode (Local Storage)',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: isOnline
-                                        ? Colors.green
-                                        : Colors.orange,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      syncStatus.isSyncing
-                                          ? 'Syncing in progress...'
-                                          : syncStatus.pendingCount > 0
-                                          ? '${syncStatus.pendingCount} pending changes'
-                                          : 'All changes synced with cloud',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    if (syncStatus.lastSyncedAt != null) ...[
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Last synced: ${syncStatus.lastSyncedAt!.hour}:${syncStatus.lastSyncedAt!.minute.toString().padLeft(2, '0')}',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                ElevatedButton.icon(
-                                  onPressed: syncStatus.isSyncing
-                                      ? null
-                                      : () async {
-                                          await ref
-                                              .read(syncServiceProvider)
-                                              .syncNow();
-                                        },
-                                  icon: syncStatus.isSyncing
-                                      ? const SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Icon(
-                                          Icons.sync_rounded,
-                                          size: 18,
-                                        ),
-                                  label: Text(
-                                    syncStatus.isSyncing
-                                        ? 'Syncing...'
-                                        : 'Sync Now',
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (syncStatus.lastError != null) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                'Sync warning: ${syncStatus.lastError}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.red,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
                     // Security Section
                     Text(
                       'Security & App Lock',
@@ -351,6 +369,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             onTap: () {
                               ref.read(pinAuthProvider.notifier).lockApp();
                             },
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: const CircleAvatar(
+                              backgroundColor: Colors.blue,
+                              child: Icon(
+                                Icons.dns_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                            title: const Text(
+                              'Server Connection & Host IP',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Text(
+                              'Target: ${ApiEndpoints.baseUrl}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: _showServerConfigDialog,
                           ),
                         ],
                       ),
@@ -461,6 +501,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Default Tax Rate (%)',
                                 prefixIcon: Icon(Icons.percent),
+                              ),
+                              validator: (value) {
+                                final rate = double.tryParse(value ?? '');
+                                return rate == null || rate < 0 || rate > 100
+                                    ? 'Enter a percentage from 0 to 100'
+                                    : null;
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _serviceChargeController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: const InputDecoration(
+                                labelText: 'Service Charge (%)',
+                                prefixIcon: Icon(Icons.room_service_outlined),
+                              ),
+                              validator: (value) {
+                                final rate = double.tryParse(value ?? '');
+                                return rate == null || rate < 0 || rate > 100
+                                    ? 'Enter a percentage from 0 to 100'
+                                    : null;
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _footerController,
+                              maxLines: 2,
+                              decoration: const InputDecoration(
+                                labelText: 'Invoice Footer',
+                                prefixIcon: Icon(Icons.notes_rounded),
                               ),
                             ),
                           ],

@@ -65,7 +65,7 @@ class PinScreen extends ConsumerWidget {
                   const SizedBox(height: 20),
 
                   Text(
-                    'FoodBillX',
+                    'HMB Bills',
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w800,

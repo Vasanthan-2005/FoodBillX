@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -8,7 +9,7 @@ import '../../core/widgets/empty_state_widget.dart';
 import '../../core/widgets/error_state_widget.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../providers/customer_provider.dart';
-import '../../local_db/schemas/customer_schema.dart';
+import '../../models/customer_model.dart';
 
 class CustomerManagementScreen extends ConsumerStatefulWidget {
   final VoidCallback onOpenSettings;
@@ -22,22 +23,33 @@ class CustomerManagementScreen extends ConsumerStatefulWidget {
 class _CustomerManagementScreenState
     extends ConsumerState<CustomerManagementScreen> {
   final _searchController = TextEditingController();
+  Timer? _debounceTimer;
   String _searchQuery = '';
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
+  void _onSearchChanged(String val) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) {
+        setState(() => _searchQuery = val.trim().toLowerCase());
+      }
+    });
+  }
+
   // ── Add / Edit Customer Dialog ─────────────────────────────────────
-  void _showCustomerFormDialog([CustomerSchema? existing]) {
+  void _showCustomerFormDialog([CustomerModel? existing]) {
     final nameController = TextEditingController(text: existing?.name ?? '');
     final phoneController = TextEditingController(text: existing?.phone ?? '');
     final emailController = TextEditingController(text: existing?.email ?? '');
 
     final isEdit = existing != null;
-    final String? customerId = existing?.serverId ?? existing?.id.toString();
+    final String? customerId = existing?.id;
 
     showDialog(
       context: context,
@@ -262,8 +274,7 @@ class _CustomerManagementScreenState
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
             child: TextField(
               controller: _searchController,
-              onChanged: (val) =>
-                  setState(() => _searchQuery = val.trim().toLowerCase()),
+              onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: 'Search customer name or phone...',
                 prefixIcon: const Icon(Icons.search_rounded),
@@ -271,6 +282,7 @@ class _CustomerManagementScreenState
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded),
                         onPressed: () {
+                          _debounceTimer?.cancel();
                           _searchController.clear();
                           setState(() => _searchQuery = '');
                         },
@@ -290,12 +302,13 @@ class _CustomerManagementScreenState
                       child: MetricCardSkeleton(),
                     ),
                   )
-                : customerState.errorMessage != null
+                : (customerState.errorMessage != null &&
+                        customerState.customers.isEmpty)
                 ? ErrorStateWidget(
                     title: 'Unable to load customers',
                     message: customerState.errorMessage!,
                     onRetry: () =>
-                        ref.read(customerProvider.notifier).loadCustomers(),
+                        ref.read(customerProvider.notifier).loadCustomers(forceSpinner: true),
                   )
                 : _buildCustomerList(customerState.customers),
           ),
@@ -304,7 +317,7 @@ class _CustomerManagementScreenState
     );
   }
 
-  Widget _buildCustomerList(List<CustomerSchema> customers) {
+  Widget _buildCustomerList(List<CustomerModel> customers) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final filtered = customers.where((c) {
       final name = c.name.toLowerCase();
@@ -324,10 +337,13 @@ class _CustomerManagementScreenState
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-      itemCount: filtered.length,
-      itemBuilder: (ctx, index) {
+    return RefreshIndicator(
+      onRefresh: () => ref.read(customerProvider.notifier).loadCustomers(forceSpinner: true),
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+        itemCount: filtered.length,
+        itemBuilder: (ctx, index) {
         final c = filtered[index];
         final String name = c.name;
         final String phone = c.phone;
@@ -335,7 +351,7 @@ class _CustomerManagementScreenState
         final double spent = c.totalSpent;
         final int visits = c.totalVisits;
         final int points = c.loyaltyPoints;
-        final String customerId = c.serverId ?? c.id.toString();
+        final String customerId = c.id;
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -536,7 +552,8 @@ class _CustomerManagementScreenState
           ),
         ).animate().fadeIn(delay: (index * 25).ms);
       },
-    );
+    ),
+  );
   }
 }
 

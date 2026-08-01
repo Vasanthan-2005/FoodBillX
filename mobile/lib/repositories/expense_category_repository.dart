@@ -1,127 +1,64 @@
-import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
+import '../api/api_client.dart';
+import '../api/api_response_parser.dart';
+import '../api/local_cache_service.dart';
+import '../core/constants/api_endpoints.dart';
+import '../models/expense_category_model.dart';
 
-import '../local_db/isar_database.dart';
-import '../local_db/schemas/expense_category_schema.dart';
-import '../local_db/schemas/sync_enums.dart';
-import '../local_db/schemas/sync_operation_schema.dart';
-
-/// Repository for expense categories.
 class ExpenseCategoryRepository {
-  final Isar _isar;
+  final ApiClient _apiClient;
+  static const String _cacheKey = 'expense_categories';
 
-  ExpenseCategoryRepository(this._isar);
+  ExpenseCategoryRepository(this._apiClient);
 
-  // ── Read ──────────────────────────────────────────────────────
+  Future<List<ExpenseCategoryModel>> getAll() async {
+    dynamic data;
+    try {
+      final response = await _apiClient.dio.get(ApiEndpoints.expenseCategories);
+      data = response.data;
+      await LocalCacheService.saveCache(_cacheKey, data);
+    } catch (_) {
+      data = await LocalCacheService.getCache(_cacheKey);
+    }
 
-  Future<List<ExpenseCategorySchema>> getAll() async {
-    return _isar.expenseCategorySchemas.where().findAll();
+    final rawList = ApiResponseParser.extractList(data, ['categories']);
+    return rawList
+        .map(
+          (item) =>
+              ExpenseCategoryModel.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .toList();
   }
 
-  Stream<List<ExpenseCategorySchema>> watchAll() {
-    return _isar.expenseCategorySchemas.where().watch(fireImmediately: true);
+  Future<ExpenseCategoryModel> create(String name, String icon) async {
+    final response = await _apiClient.dio.post(
+      ApiEndpoints.expenseCategories,
+      data: {'name': name, 'icon': icon},
+    );
+    final item = ApiResponseParser.extractMap(response.data, ['category']);
+    return ExpenseCategoryModel.fromJson(item);
   }
 
-  // ── Write ─────────────────────────────────────────────────────
-
-  Future<ExpenseCategorySchema> create(String name, String icon) async {
-    final now = DateTime.now();
-    final schema = ExpenseCategorySchema()
-      ..name = name
-      ..icon = icon
-      ..isActive = true
-      ..syncStatus = SyncStatus.pending
-      ..updatedAt = now
-      ..createdAt = now;
-
-    await _isar.writeTxn(() async {
-      await _isar.expenseCategorySchemas.put(schema);
-
-      final op = SyncOperationSchema()
-        ..entityType = SyncEntityType.expenseCategory
-        ..operationType = SyncOperationType.create
-        ..localId = schema.id
-        ..payload = jsonEncode({'name': name, 'icon': icon})
-        ..createdAt = now
-        ..retryCount = 0;
-      await _isar.syncOperationSchemas.put(op);
-    });
-
-    return schema;
-  }
-
-  Future<ExpenseCategorySchema> update(
-    String idOrServerId,
+  Future<ExpenseCategoryModel> update(
+    String id,
     String name,
     String icon,
   ) async {
-    final schema = await _findByIdOrServerId(idOrServerId);
-    if (schema == null) throw Exception('Expense category not found');
-
-    final now = DateTime.now();
-    schema
-      ..name = name
-      ..icon = icon
-      ..syncStatus = SyncStatus.pending
-      ..updatedAt = now;
-
-    await _isar.writeTxn(() async {
-      await _isar.expenseCategorySchemas.put(schema);
-
-      final op = SyncOperationSchema()
-        ..entityType = SyncEntityType.expenseCategory
-        ..operationType = SyncOperationType.update
-        ..localId = schema.id
-        ..serverId = schema.serverId
-        ..payload = jsonEncode({'name': name, 'icon': icon})
-        ..createdAt = now
-        ..retryCount = 0;
-      await _isar.syncOperationSchemas.put(op);
-    });
-
-    return schema;
+    final response = await _apiClient.dio.put(
+      '${ApiEndpoints.expenseCategories}/$id',
+      data: {'name': name, 'icon': icon},
+    );
+    final item = ApiResponseParser.extractMap(response.data, ['category']);
+    return ExpenseCategoryModel.fromJson(item);
   }
 
-  Future<void> delete(String idOrServerId) async {
-    final schema = await _findByIdOrServerId(idOrServerId);
-    if (schema == null) return;
-
-    final now = DateTime.now();
-    await _isar.writeTxn(() async {
-      await _isar.expenseCategorySchemas.delete(schema.id);
-
-      if (schema.serverId != null) {
-        final op = SyncOperationSchema()
-          ..entityType = SyncEntityType.expenseCategory
-          ..operationType = SyncOperationType.delete
-          ..localId = schema.id
-          ..serverId = schema.serverId
-          ..payload = '{}'
-          ..createdAt = now
-          ..retryCount = 0;
-        await _isar.syncOperationSchemas.put(op);
-      }
-    });
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────
-
-  Future<ExpenseCategorySchema?> _findByIdOrServerId(String idStr) async {
-    final intId = int.tryParse(idStr);
-    if (intId != null) {
-      final byId = await _isar.expenseCategorySchemas.get(intId);
-      if (byId != null) return byId;
-    }
-    return _isar.expenseCategorySchemas
-        .filter()
-        .serverIdEqualTo(idStr)
-        .findFirst();
+  Future<void> delete(String id) async {
+    await _apiClient.dio.delete('${ApiEndpoints.expenseCategories}/$id');
   }
 }
 
 final expenseCategoryRepositoryProvider = Provider<ExpenseCategoryRepository>((
   ref,
 ) {
-  return ExpenseCategoryRepository(ref.watch(isarProvider));
+  return ExpenseCategoryRepository(ref.watch(apiClientProvider));
 });

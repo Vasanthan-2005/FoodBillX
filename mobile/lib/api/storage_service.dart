@@ -18,7 +18,7 @@ class StorageService {
   }
 
   Future<bool> savePin(String pin) async {
-    if (pin.length != 4) return false;
+    if (!RegExp(r'^\d{4}$').hasMatch(pin)) return false;
     final prefs = await SharedPreferences.getInstance();
     final hash = _hashPin(pin);
     return await prefs.setString(_keyPinHash, hash);
