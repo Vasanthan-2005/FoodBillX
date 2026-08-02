@@ -14,6 +14,8 @@ class CustomerController {
   async createCustomer(req, res, next) {
     try {
       const customer = await customerService.createCustomer(req.body);
+      req.io?.emit('customer_updated', { customer });
+      req.io?.emit('data_updated', { type: 'customer' });
       return sendSuccess(res, 201, 'Customer created successfully', { customer });
     } catch (error) {
       next(error);
@@ -23,6 +25,8 @@ class CustomerController {
   async updateCustomer(req, res, next) {
     try {
       const customer = await customerService.updateCustomer(req.params.id, req.body);
+      req.io?.emit('customer_updated', { customer });
+      req.io?.emit('data_updated', { type: 'customer' });
       return sendSuccess(res, 200, 'Customer updated successfully', { customer });
     } catch (error) {
       next(error);
@@ -32,6 +36,8 @@ class CustomerController {
   async deleteCustomer(req, res, next) {
     try {
       const result = await customerService.deleteCustomer(req.params.id);
+      req.io?.emit('customer_updated', {});
+      req.io?.emit('data_updated', { type: 'customer' });
       return sendSuccess(res, 200, result.message);
     } catch (error) {
       next(error);
@@ -42,6 +48,8 @@ class CustomerController {
     try {
       const { cardNumber } = req.body;
       const customer = await customerService.assignLoyaltyCard(req.params.id, cardNumber);
+      req.io?.emit('customer_updated', { customer });
+      req.io?.emit('data_updated', { type: 'customer' });
       return sendSuccess(res, 200, 'Loyalty card assigned successfully', { customer });
     } catch (error) {
       next(error);

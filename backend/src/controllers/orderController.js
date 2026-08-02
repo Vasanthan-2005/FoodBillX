@@ -5,6 +5,8 @@ class OrderController {
   async createOrder(req, res, next) {
     try {
       const order = await orderService.createOrder(req.body);
+      req.io?.emit('order_created', { order });
+      req.io?.emit('data_updated', { type: 'order' });
       return sendSuccess(res, 201, 'Order created successfully', { order });
     } catch (error) {
       next(error);
@@ -32,6 +34,7 @@ class OrderController {
   async updateOrder(req, res, next) {
     try {
       const order = await orderService.updateOrder(req.params.id, req.body);
+      req.io?.emit('data_updated', { type: 'order' });
       return sendSuccess(res, 200, 'Order updated successfully', { order });
     } catch (error) {
       next(error);
@@ -41,6 +44,7 @@ class OrderController {
   async refundOrder(req, res, next) {
     try {
       const order = await orderService.refundOrder(req.params.id);
+      req.io?.emit('data_updated', { type: 'order' });
       return sendSuccess(res, 200, 'Order refunded successfully', { order });
     } catch (error) {
       next(error);
@@ -50,6 +54,7 @@ class OrderController {
   async deleteOrder(req, res, next) {
     try {
       const result = await orderService.deleteOrder(req.params.id);
+      req.io?.emit('data_updated', { type: 'order' });
       return sendSuccess(res, 200, result.message);
     } catch (error) {
       next(error);

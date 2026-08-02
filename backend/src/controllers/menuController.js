@@ -15,6 +15,8 @@ class MenuController {
   async createCategory(req, res, next) {
     try {
       const category = await menuService.createCategory(req.body);
+      req.io?.emit('menu_updated', { category });
+      req.io?.emit('data_updated', { type: 'category' });
       return sendSuccess(res, 201, 'Category created successfully', { category });
     } catch (error) {
       next(error);
@@ -24,6 +26,8 @@ class MenuController {
   async updateCategory(req, res, next) {
     try {
       const category = await menuService.updateCategory(req.params.id, req.body);
+      req.io?.emit('menu_updated', { category });
+      req.io?.emit('data_updated', { type: 'category' });
       return sendSuccess(res, 200, 'Category updated successfully', { category });
     } catch (error) {
       next(error);
@@ -33,6 +37,8 @@ class MenuController {
   async deleteCategory(req, res, next) {
     try {
       const result = await menuService.deleteCategory(req.params.id);
+      req.io?.emit('menu_updated', {});
+      req.io?.emit('data_updated', { type: 'category' });
       return sendSuccess(res, 200, result.message);
     } catch (error) {
       next(error);
@@ -52,6 +58,8 @@ class MenuController {
   async createMenuItem(req, res, next) {
     try {
       const item = await menuService.createMenuItem(req.body);
+      req.io?.emit('menu_updated', { item });
+      req.io?.emit('data_updated', { type: 'menu' });
       return sendSuccess(res, 201, 'Menu item created successfully', { item });
     } catch (error) {
       next(error);
@@ -61,6 +69,8 @@ class MenuController {
   async updateMenuItem(req, res, next) {
     try {
       const item = await menuService.updateMenuItem(req.params.id, req.body);
+      req.io?.emit('menu_updated', { item });
+      req.io?.emit('data_updated', { type: 'menu' });
       return sendSuccess(res, 200, 'Menu item updated successfully', { item });
     } catch (error) {
       next(error);
@@ -70,6 +80,8 @@ class MenuController {
   async toggleAvailability(req, res, next) {
     try {
       const item = await menuService.toggleAvailability(req.params.id);
+      req.io?.emit('menu_updated', { item });
+      req.io?.emit('data_updated', { type: 'menu' });
       return sendSuccess(res, 200, 'Item availability updated', { item });
     } catch (error) {
       next(error);
@@ -79,6 +91,8 @@ class MenuController {
   async deleteMenuItem(req, res, next) {
     try {
       const result = await menuService.deleteMenuItem(req.params.id);
+      req.io?.emit('menu_updated', {});
+      req.io?.emit('data_updated', { type: 'menu' });
       return sendSuccess(res, 200, result.message);
     } catch (error) {
       next(error);

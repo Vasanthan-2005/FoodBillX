@@ -8,12 +8,13 @@ import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/whatsapp_helper.dart';
 import '../../core/widgets/empty_state_widget.dart';
 import '../../core/widgets/skeleton_loader.dart';
-import '../../models/customer_model.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/customer_provider.dart';
 import '../../providers/menu_provider.dart';
 
+import '../../core/widgets/dish_image_widget.dart';
 import '../../core/widgets/live_badge_widget.dart';
+import '../../core/widgets/loyalty_input_field_widget.dart';
 
 class BillingScreen extends ConsumerStatefulWidget {
   final VoidCallback onOpenSettings;
@@ -81,7 +82,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           builder: (context, ref, child) {
             final cartState = ref.watch(billingProvider);
             final notifier = ref.read(billingProvider.notifier);
-            final customerState = ref.watch(customerProvider);
             final isDark = Theme.of(context).brightness == Brightness.dark;
 
             return Container(
@@ -139,52 +139,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     const SizedBox(height: 16),
 
                     // Loyalty Card Identification Field
-                    Autocomplete<CustomerModel>(
-                      displayStringForOption: (CustomerModel option) =>
-                          '${option.loyaltyCardNumber} (${option.name} • ${option.phone})',
-                      optionsBuilder: (TextEditingValue textEditingValue) {
-                        final query = textEditingValue.text.trim().toLowerCase();
-                        if (query.isEmpty) return const Iterable<CustomerModel>.empty();
-                        return customerState.customers.where((c) {
-                          return c.loyaltyCardNumber.toLowerCase().contains(query) ||
-                              c.phone.contains(query) ||
-                              c.name.toLowerCase().contains(query);
-                        });
-                      },
-                      onSelected: (CustomerModel selection) {
-                        notifier.selectCustomer(selection);
-                      },
-                      fieldViewBuilder:
-                          (context, controller, focusNode, onFieldSubmitted) {
-                        if (controller.text.isEmpty &&
-                            cartState.loyaltyCardNumber.isNotEmpty) {
-                          controller.text = cartState.loyaltyCardNumber;
-                        }
-                        return TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          decoration: InputDecoration(
-                            labelText: 'Loyalty Card Number *',
-                            hintText: 'Enter loyalty card number (e.g. HMB-1001)...',
-                            prefixIcon: const Icon(Icons.credit_card_rounded),
-                            suffixIcon: controller.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () {
-                                      controller.clear();
-                                      notifier.clearCustomer();
-                                    },
-                                  )
-                                : null,
-                          ),
-                          onChanged: (val) async {
-                            if (val.trim().isNotEmpty) {
-                              await notifier.lookupAndSelectByLoyaltyCard(val);
-                            }
-                          },
-                        );
-                      },
-                    ),
+                    const LoyaltyInputFieldWidget(),
                     const SizedBox(height: 10),
 
                     // Customer Details / Quick Register Prompt
@@ -914,12 +869,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  CircleAvatar(
-                                    radius: 16,
-                                    backgroundColor:
-                                        AppColors.primary.withAlpha(20),
-                                    child: Text(emoji,
-                                        style: const TextStyle(fontSize: 16)),
+                                  DishImageWidget(
+                                    imageUrl: item.imageUrl,
+                                    fallbackEmoji: emoji,
+                                    size: 34,
+                                    borderRadius: 10,
                                   ),
                                   Text(
                                     item.name,

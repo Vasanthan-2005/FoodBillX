@@ -8,6 +8,8 @@ import '../../core/widgets/empty_state_widget.dart';
 import '../../models/menu_item_model.dart';
 import '../../providers/menu_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../core/utils/image_picker_service.dart';
+import '../../core/widgets/dish_image_widget.dart';
 
 class MenuManagementScreen extends ConsumerStatefulWidget {
   final VoidCallback onOpenSettings;
@@ -105,6 +107,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
         existingItem?.categoryId ??
         (categories.isNotEmpty ? categories.first.id : '');
     bool isVeg = existingItem?.isVeg ?? true;
+    String selectedImage = existingItem?.image ?? '';
 
     final formKey = GlobalKey<FormState>();
 
@@ -137,6 +140,62 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                             : 'Edit Food Item',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Mandatory Dish Image Selector Card
+                      InkWell(
+                        onTap: () async {
+                          final picked = await ImagePickerService.showImageSourceDialog(modalCtx);
+                          if (picked != null) {
+                            setModalState(() => selectedImage = picked);
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? AppColors.darkCard
+                                : AppColors.lightBackground,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: selectedImage.isEmpty ? Colors.amber.shade800 : AppColors.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              DishImageWidget(
+                                imageUrl: selectedImage,
+                                fallbackEmoji: isVeg ? '🥗' : '🍗',
+                                size: 48,
+                                borderRadius: 10,
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      selectedImage.isEmpty ? 'Upload Dish Image *' : 'Dish Image Attached',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: selectedImage.isEmpty ? Colors.amber.shade800 : null,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      selectedImage.isEmpty ? 'Tap to take camera photo or pick gallery' : 'Tap to change dish image',
+                                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -241,6 +300,10 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                       ElevatedButton(
                         onPressed: () async {
                           if (!formKey.currentState!.validate()) return;
+                          if (selectedImage.trim().isEmpty) {
+                            SnackbarUtils.showError(modalCtx, 'Dish image is mandatory! Please upload or capture a photo.');
+                            return;
+                          }
                           Navigator.pop(ctx);
 
                           final gstVal =
@@ -258,7 +321,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                 ) ??
                                 0.0,
                             gstPercentage: gstVal,
-                            image: existingItem?.image ?? '',
+                            image: selectedImage,
                             isVeg: isVeg,
                             isAvailable: existingItem?.isAvailable ?? true,
                           );
@@ -547,7 +610,14 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                         : AppColors.nonVegRed,
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 10),
+                DishImageWidget(
+                  imageUrl: item.image,
+                  fallbackEmoji: item.isVeg ? '🥗' : '🍗',
+                  size: 40,
+                  borderRadius: 10,
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
