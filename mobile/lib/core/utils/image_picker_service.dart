@@ -34,7 +34,7 @@ class ImagePickerService {
 
   /// Shows a modal sheet to select between Camera and Gallery.
   static Future<String?> showImageSourceDialog(BuildContext context) async {
-    return showModalBottomSheet<String?>(
+    final source = await showModalBottomSheet<ImageSource?>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -47,7 +47,7 @@ class ImagePickerService {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Select Dish Image *',
+                  'Select Dish Image',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -57,26 +57,12 @@ class ImagePickerService {
                 ListTile(
                   leading: const Icon(Icons.camera_alt_rounded, color: Colors.blue),
                   title: const Text('Take Photo (Camera)'),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    final result = await pickAndCompressImage(
-                      context,
-                      source: ImageSource.camera,
-                    );
-                    if (context.mounted) Navigator.pop(context, result);
-                  },
+                  onTap: () => Navigator.pop(ctx, ImageSource.camera),
                 ),
                 ListTile(
                   leading: const Icon(Icons.photo_library_rounded, color: Colors.purple),
                   title: const Text('Choose from Gallery'),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    final result = await pickAndCompressImage(
-                      context,
-                      source: ImageSource.gallery,
-                    );
-                    if (context.mounted) Navigator.pop(context, result);
-                  },
+                  onTap: () => Navigator.pop(ctx, ImageSource.gallery),
                 ),
               ],
             ),
@@ -84,5 +70,8 @@ class ImagePickerService {
         );
       },
     );
+
+    if (source == null || !context.mounted) return null;
+    return pickAndCompressImage(context, source: source);
   }
 }
