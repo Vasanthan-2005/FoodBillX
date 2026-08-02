@@ -82,43 +82,45 @@ class RevenueLineChartWidget extends StatelessWidget {
                     letterSpacing: -0.5,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: (isPositivePct ? Colors.green : Colors.red)
-                        .withAlpha(25),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${isPositivePct ? '+' : ''}${percentageChange.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isPositivePct
-                              ? Colors.green.shade700
-                              : Colors.red.shade700,
-                        ),
-                      ),
-                      if (percentageSubtitle.isNotEmpty) ...[
-                        const SizedBox(width: 4),
+                if (percentageChange != 0.0) ...[
+                  const SizedBox(width: 10),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (isPositivePct ? Colors.green : Colors.red)
+                          .withAlpha(25),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Text(
-                          percentageSubtitle,
+                          '${isPositivePct ? '+' : ''}${percentageChange.toStringAsFixed(1)}%',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
                             color: isPositivePct
-                                ? Colors.green.shade800
-                                : Colors.red.shade800,
+                                ? Colors.green.shade700
+                                : Colors.red.shade700,
                           ),
                         ),
+                        if (percentageSubtitle.isNotEmpty) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            percentageSubtitle,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isPositivePct
+                                  ? Colors.green.shade800
+                                  : Colors.red.shade800,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 24),

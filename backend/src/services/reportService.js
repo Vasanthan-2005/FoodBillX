@@ -158,6 +158,30 @@ class ReportService {
       { $sort: { total: -1 } },
     ]);
 
+    // --- HOURLY SALES TREND (TODAY 6 INTERVALS) ---
+    const hourlyRevenueToday = [];
+    const hourlyRanges = [
+      [0, 3],
+      [4, 7],
+      [8, 11],
+      [12, 15],
+      [16, 19],
+      [20, 23],
+    ];
+
+    for (const [startHour, endHour] of hourlyRanges) {
+      const slotStart = new Date(startOfDay);
+      slotStart.setHours(startHour, 0, 0, 0);
+      const slotEnd = new Date(startOfDay);
+      slotEnd.setHours(endHour, 59, 59, 999);
+
+      const slotOrder = await Order.aggregate([
+        { $match: { ...validOrderMatch, createdAt: { $gte: slotStart, $lte: slotEnd } } },
+        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+      ]);
+      hourlyRevenueToday.push(slotOrder[0]?.total || 0.0);
+    }
+
     // --- DAILY SALES TREND (LAST 7 DAYS) ---
     const recentDailyRevenue = [];
     for (let i = 6; i >= 0; i--) {
@@ -173,6 +197,59 @@ class ReportService {
       recentDailyRevenue.push(dayOrder[0]?.total || 0.0);
     }
 
+    // --- MONTHLY WEEKLY TREND (5 WEEKS OF CURRENT MONTH) ---
+    const monthlyWeeklyRevenue = [];
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+
+    const weekRanges = [
+      [1, 7],
+      [8, 14],
+      [15, 21],
+      [22, 28],
+      [29, lastDayOfMonth],
+    ];
+
+    for (const [sDay, eDay] of weekRanges) {
+      if (sDay > lastDayOfMonth) {
+        monthlyWeeklyRevenue.push(0.0);
+        continue;
+      }
+      const actualEDay = Math.min(eDay, lastDayOfMonth);
+      const wStart = new Date(year, month, sDay, 0, 0, 0, 0);
+      const wEnd = new Date(year, month, actualEDay, 23, 59, 59, 999);
+
+      const wOrder = await Order.aggregate([
+        { $match: { ...validOrderMatch, createdAt: { $gte: wStart, $lte: wEnd } } },
+        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+      ]);
+      monthlyWeeklyRevenue.push(wOrder[0]?.total || 0.0);
+    }
+
+    // --- PREVIOUS PERIOD TOTALS FOR ACCURATE COMPARISON ---
+    const prevWeekStart = new Date(startOfWeek);
+    prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+    const prevWeekEnd = new Date(startOfWeek);
+    prevWeekEnd.setMilliseconds(-1);
+
+    const prevMonthStart = new Date(year, month - 1, 1, 0, 0, 0, 0);
+    const prevMonthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const [prevWeekAgg, prevMonthAgg] = await Promise.all([
+      Order.aggregate([
+        { $match: { ...validOrderMatch, createdAt: { $gte: prevWeekStart, $lte: prevWeekEnd } } },
+        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+      ]),
+      Order.aggregate([
+        { $match: { ...validOrderMatch, createdAt: { $gte: prevMonthStart, $lte: prevMonthEnd } } },
+        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+      ]),
+    ]);
+
+    const previousWeekRevenue = prevWeekAgg[0]?.total || 0.0;
+    const previousMonthRevenue = prevMonthAgg[0]?.total || 0.0;
+
     // Return merged summary object
     return {
       todayRevenue,
@@ -184,10 +261,12 @@ class ReportService {
       weekOrderCount,
       weekExpenseTotal,
       weeklyProfit,
+      previousWeekRevenue,
       monthRevenue,
       monthOrderCount,
       monthExpenseTotal,
       monthlyProfit,
+      previousMonthRevenue,
       overallRevenue,
       overallOrderCount,
       overallExpenseTotal,
@@ -206,7 +285,9 @@ class ReportService {
       },
       paymentAnalytics,
       expenseBreakdown: expenseBreakdown.map((e) => ({ category: e._id || 'Miscellaneous', total: e.total, count: e.count })),
+      hourlyRevenueToday,
       recentDailyRevenue,
+      monthlyWeeklyRevenue,
     };
   }
 }

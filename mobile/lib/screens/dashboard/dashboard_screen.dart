@@ -29,29 +29,6 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _selectedTimeframe = 'Daily';
 
-  List<double> _getDailyDataPoints(double todayRevenue) {
-    if (todayRevenue <= 0) return List.filled(6, 0.0);
-    return [
-      todayRevenue * 0.05,
-      todayRevenue * 0.10,
-      todayRevenue * 0.25,
-      todayRevenue * 0.35,
-      todayRevenue * 0.15,
-      todayRevenue * 0.10,
-    ];
-  }
-
-  List<double> _getMonthlyDataPoints(double monthRevenue) {
-    if (monthRevenue <= 0) return List.filled(5, 0.0);
-    return [
-      monthRevenue * 0.15,
-      monthRevenue * 0.22,
-      monthRevenue * 0.18,
-      monthRevenue * 0.25,
-      monthRevenue * 0.20,
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
     final metrics = ref.watch(dashboardProvider);
@@ -88,17 +65,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     };
 
     final chartDataPoints = switch (_selectedTimeframe) {
-      'Monthly' => _getMonthlyDataPoints(metrics.monthRevenue),
+      'Monthly' => metrics.monthlyWeeklyRevenue.isNotEmpty
+          ? metrics.monthlyWeeklyRevenue
+          : List.filled(5, 0.0),
       'Weekly' => metrics.recentDailyRevenue.isNotEmpty
           ? metrics.recentDailyRevenue
           : List.filled(7, 0.0),
-      _ => _getDailyDataPoints(metrics.todayRevenue),
+      _ => metrics.hourlyRevenueToday.isNotEmpty
+          ? metrics.hourlyRevenueToday
+          : List.filled(6, 0.0),
     };
 
-    final pctChange = switch (_selectedTimeframe) {
-      'Monthly' => 18.7,
-      'Weekly' => 15.2,
-      _ => 9.4,
+    final double pctChange = switch (_selectedTimeframe) {
+      'Monthly' => metrics.previousMonthRevenue > 0
+          ? ((metrics.monthRevenue - metrics.previousMonthRevenue) / metrics.previousMonthRevenue * 100)
+          : 0.0,
+      'Weekly' => metrics.previousWeekRevenue > 0
+          ? ((metrics.weekRevenue - metrics.previousWeekRevenue) / metrics.previousWeekRevenue * 100)
+          : 0.0,
+      _ => metrics.yesterdayRevenue > 0
+          ? ((metrics.todayRevenue - metrics.yesterdayRevenue) / metrics.yesterdayRevenue * 100)
+          : 0.0,
     };
 
     return Scaffold(

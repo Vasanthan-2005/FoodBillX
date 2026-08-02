@@ -13,11 +13,13 @@ class DashboardState {
   final int weekOrderCount;
   final double weekExpenseTotal;
   final double weeklyProfit;
+  final double previousWeekRevenue;
 
   final double monthRevenue;
   final int monthOrderCount;
   final double monthExpenseTotal;
   final double monthlyProfit;
+  final double previousMonthRevenue;
 
   final double overallRevenue;
   final int overallOrderCount;
@@ -27,7 +29,9 @@ class DashboardState {
   final double averageBillValue;
   final String peakSellingHour;
 
+  final List<double> hourlyRevenueToday;
   final List<double> recentDailyRevenue;
+  final List<double> monthlyWeeklyRevenue;
   final List<Map<String, dynamic>> topSellingItems;
   final List<Map<String, dynamic>> leastSellingItems;
   final Map<String, dynamic> customerAnalytics;
@@ -47,17 +51,21 @@ class DashboardState {
     this.weekOrderCount = 0,
     this.weekExpenseTotal = 0,
     this.weeklyProfit = 0,
+    this.previousWeekRevenue = 0,
     this.monthRevenue = 0,
     this.monthOrderCount = 0,
     this.monthExpenseTotal = 0,
     this.monthlyProfit = 0,
+    this.previousMonthRevenue = 0,
     this.overallRevenue = 0,
     this.overallOrderCount = 0,
     this.overallExpenseTotal = 0,
     this.overallProfit = 0,
     this.averageBillValue = 0,
     this.peakSellingHour = '1:00 PM',
+    this.hourlyRevenueToday = const [],
     this.recentDailyRevenue = const [],
+    this.monthlyWeeklyRevenue = const [],
     this.topSellingItems = const [],
     this.leastSellingItems = const [],
     this.customerAnalytics = const {},
@@ -77,17 +85,21 @@ class DashboardState {
     int? weekOrderCount,
     double? weekExpenseTotal,
     double? weeklyProfit,
+    double? previousWeekRevenue,
     double? monthRevenue,
     int? monthOrderCount,
     double? monthExpenseTotal,
     double? monthlyProfit,
+    double? previousMonthRevenue,
     double? overallRevenue,
     int? overallOrderCount,
     double? overallExpenseTotal,
     double? overallProfit,
     double? averageBillValue,
     String? peakSellingHour,
+    List<double>? hourlyRevenueToday,
     List<double>? recentDailyRevenue,
+    List<double>? monthlyWeeklyRevenue,
     List<Map<String, dynamic>>? topSellingItems,
     List<Map<String, dynamic>>? leastSellingItems,
     Map<String, dynamic>? customerAnalytics,
@@ -106,17 +118,21 @@ class DashboardState {
       weekOrderCount: weekOrderCount ?? this.weekOrderCount,
       weekExpenseTotal: weekExpenseTotal ?? this.weekExpenseTotal,
       weeklyProfit: weeklyProfit ?? this.weeklyProfit,
+      previousWeekRevenue: previousWeekRevenue ?? this.previousWeekRevenue,
       monthRevenue: monthRevenue ?? this.monthRevenue,
       monthOrderCount: monthOrderCount ?? this.monthOrderCount,
       monthExpenseTotal: monthExpenseTotal ?? this.monthExpenseTotal,
       monthlyProfit: monthlyProfit ?? this.monthlyProfit,
+      previousMonthRevenue: previousMonthRevenue ?? this.previousMonthRevenue,
       overallRevenue: overallRevenue ?? this.overallRevenue,
       overallOrderCount: overallOrderCount ?? this.overallOrderCount,
       overallExpenseTotal: overallExpenseTotal ?? this.overallExpenseTotal,
       overallProfit: overallProfit ?? this.overallProfit,
       averageBillValue: averageBillValue ?? this.averageBillValue,
       peakSellingHour: peakSellingHour ?? this.peakSellingHour,
+      hourlyRevenueToday: hourlyRevenueToday ?? this.hourlyRevenueToday,
       recentDailyRevenue: recentDailyRevenue ?? this.recentDailyRevenue,
+      monthlyWeeklyRevenue: monthlyWeeklyRevenue ?? this.monthlyWeeklyRevenue,
       topSellingItems: topSellingItems ?? this.topSellingItems,
       leastSellingItems: leastSellingItems ?? this.leastSellingItems,
       customerAnalytics: customerAnalytics ?? this.customerAnalytics,
@@ -168,11 +184,13 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     final weekOrderCount = (summary['weekOrderCount'] as num?)?.toInt() ?? 0;
     final weekExpenseTotal = (summary['weekExpenseTotal'] as num?)?.toDouble() ?? 0.0;
     final weeklyProfit = (summary['weeklyProfit'] as num?)?.toDouble() ?? (weekRevenue - weekExpenseTotal);
+    final previousWeekRevenue = (summary['previousWeekRevenue'] as num?)?.toDouble() ?? 0.0;
 
     final monthRevenue = (summary['monthRevenue'] as num?)?.toDouble() ?? 0.0;
     final monthOrderCount = (summary['monthOrderCount'] as num?)?.toInt() ?? 0;
     final monthExpenseTotal = (summary['monthExpenseTotal'] as num?)?.toDouble() ?? 0.0;
     final monthlyProfit = (summary['monthlyProfit'] as num?)?.toDouble() ?? (monthRevenue - monthExpenseTotal);
+    final previousMonthRevenue = (summary['previousMonthRevenue'] as num?)?.toDouble() ?? 0.0;
 
     final overallRevenue = (summary['overallRevenue'] as num?)?.toDouble() ?? 0.0;
     final overallOrderCount = (summary['overallOrderCount'] as num?)?.toInt() ?? 0;
@@ -199,8 +217,14 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     final rawExpB = summary['expenseBreakdown'] as List? ?? [];
     final expenseBreakdown = rawExpB.map((e) => Map<String, dynamic>.from(e)).toList();
 
+    final rawHourlyRev = summary['hourlyRevenueToday'] as List? ?? [];
+    final hourlyRevenueToday = rawHourlyRev.map((e) => (e as num).toDouble()).toList();
+
     final rawDailyRev = summary['recentDailyRevenue'] as List? ?? [];
     final recentDailyRevenue = rawDailyRev.map((e) => (e as num).toDouble()).toList();
+
+    final rawMonthlyRev = summary['monthlyWeeklyRevenue'] as List? ?? [];
+    final monthlyWeeklyRevenue = rawMonthlyRev.map((e) => (e as num).toDouble()).toList();
 
     state = state.copyWith(
       todayRevenue: todayRevenue,
@@ -212,17 +236,21 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       weekOrderCount: weekOrderCount,
       weekExpenseTotal: weekExpenseTotal,
       weeklyProfit: weeklyProfit,
+      previousWeekRevenue: previousWeekRevenue,
       monthRevenue: monthRevenue,
       monthOrderCount: monthOrderCount,
       monthExpenseTotal: monthExpenseTotal,
       monthlyProfit: monthlyProfit,
+      previousMonthRevenue: previousMonthRevenue,
       overallRevenue: overallRevenue,
       overallOrderCount: overallOrderCount,
       overallExpenseTotal: overallExpenseTotal,
       overallProfit: overallProfit,
       averageBillValue: averageBillValue,
       peakSellingHour: peakSellingHour,
+      hourlyRevenueToday: hourlyRevenueToday.isNotEmpty ? hourlyRevenueToday : List.filled(6, 0.0),
       recentDailyRevenue: recentDailyRevenue.isNotEmpty ? recentDailyRevenue : List.filled(7, 0.0),
+      monthlyWeeklyRevenue: monthlyWeeklyRevenue.isNotEmpty ? monthlyWeeklyRevenue : List.filled(5, 0.0),
       topSellingItems: topSellingItems,
       leastSellingItems: leastSellingItems,
       customerAnalytics: customerAnalytics,
