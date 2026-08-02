@@ -343,7 +343,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                 );
                                 if (confirm == true) {
                                   final success = await ref.read(ordersProvider.notifier).refundOrder(order.id);
-                                  if (context.mounted && success) {
+                                  if (mounted && success) {
                                     SnackbarUtils.showSuccess(context, 'Order #${order.orderNumber} refunded.');
                                   }
                                 }
@@ -386,7 +386,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                 );
                                 await PdfInvoiceHelper.shareInvoiceViaWhatsApp(file, order.customerPhone, order.orderNumber);
                               } catch (e) {
-                                if (context.mounted) {
+                                if (mounted) {
                                   SnackbarUtils.showError(context, 'Failed to generate PDF bill');
                                 }
                               }

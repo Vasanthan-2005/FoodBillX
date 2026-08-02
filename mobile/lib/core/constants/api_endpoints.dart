@@ -1,8 +1,9 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiEndpoints {
+  static const String liveProductionUrl =
+      'https://foodbillx.onrender.com/api/v1';
+
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
   );
@@ -11,6 +12,21 @@ class ApiEndpoints {
   static const String defaultLanIp = 'http://192.168.0.176:5000/api/v1';
   static const String emulatorIp = 'http://10.0.2.2:5000/api/v1';
   static const String localhostIp = 'http://127.0.0.1:5000/api/v1';
+
+  static String _formatUrl(String url) {
+    String clean = url.trim().replaceFirst(RegExp(r'/$'), '');
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      final isLocal = clean.startsWith('127.0.0.1') ||
+          clean.startsWith('localhost') ||
+          clean.startsWith('10.0.2.2') ||
+          clean.startsWith('192.168.');
+      clean = isLocal ? 'http://$clean' : 'https://$clean';
+    }
+    if (!clean.endsWith('/api/v1')) {
+      clean = '$clean/api/v1';
+    }
+    return clean;
+  }
 
   static Future<void> initSavedServerUrl() async {
     try {
@@ -29,13 +45,7 @@ class ApiEndpoints {
         await prefs.remove('fbx_custom_server_url');
         setOverrideBaseUrl(null);
       } else {
-        String clean = url.trim().replaceFirst(RegExp(r'/$'), '');
-        if (!clean.contains('http://') && !clean.contains('https://')) {
-          clean = 'http://$clean';
-        }
-        if (!clean.endsWith('/api/v1')) {
-          clean = '$clean/api/v1';
-        }
+        final clean = _formatUrl(url);
         await prefs.setString('fbx_custom_server_url', clean);
         setOverrideBaseUrl(clean);
       }
@@ -44,14 +54,7 @@ class ApiEndpoints {
 
   static void setOverrideBaseUrl(String? url) {
     if (url != null && url.trim().isNotEmpty) {
-      String clean = url.trim().replaceFirst(RegExp(r'/$'), '');
-      if (!clean.contains('http://') && !clean.contains('https://')) {
-        clean = 'http://$clean';
-      }
-      if (!clean.endsWith('/api/v1')) {
-        clean = '$clean/api/v1';
-      }
-      _overrideBaseUrl = clean;
+      _overrideBaseUrl = _formatUrl(url);
     } else {
       _overrideBaseUrl = null;
     }
@@ -62,15 +65,9 @@ class ApiEndpoints {
       return _overrideBaseUrl!;
     }
     if (_configuredBaseUrl.isNotEmpty) {
-      return _configuredBaseUrl.replaceFirst(RegExp(r'/$'), '');
+      return _formatUrl(_configuredBaseUrl);
     }
-    if (kIsWeb) {
-      return '${Uri.base.origin}/api/v1';
-    }
-    if (Platform.isAndroid) {
-      return defaultLanIp;
-    }
-    return localhostIp;
+    return liveProductionUrl;
   }
 
   // Auth

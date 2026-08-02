@@ -148,14 +148,14 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
                       success = await ref.read(expenseProvider.notifier).updateExpense(existing.id, payload);
                     }
 
-                    if (mounted) {
+                    if (ctx.mounted) {
                       if (success) {
                         SnackbarUtils.showSuccess(
-                          context,
+                          ctx,
                           existing == null ? 'Expense logged successfully' : 'Expense updated',
                         );
                       } else {
-                        SnackbarUtils.showError(context, 'Failed to save expense');
+                        SnackbarUtils.showError(ctx, 'Failed to save expense');
                       }
                     }
                   },
@@ -331,7 +331,7 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
                                 );
                                 if (confirm == true) {
                                   final ok = await ref.read(expenseProvider.notifier).deleteExpense(exp.id);
-                                  if (context.mounted && ok) {
+                                  if (mounted && ok) {
                                     SnackbarUtils.showSuccess(context, 'Expense deleted');
                                   }
                                 }

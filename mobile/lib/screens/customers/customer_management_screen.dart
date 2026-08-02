@@ -129,7 +129,7 @@ class _CustomerManagementScreenState
                 if (ok) {
                   Navigator.pop(ctx);
                   SnackbarUtils.showSuccess(
-                    context,
+                    ctx,
                     isEdit
                         ? '$name updated successfully'
                         : '$name added to loyalty directory',

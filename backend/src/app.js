@@ -21,6 +21,31 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+/**
+ * Health Check Endpoint
+ * 
+ * Intended for:
+ * - Render keep-alive monitoring
+ * - Health checks
+ * - Deployment verification
+ * - Uptime monitoring
+ * 
+ * Unauthenticated, no database access, lightweight & instant response.
+ */
+const healthHandler = (req, res) => {
+  res.status(200).json({
+    success: true,
+    status: 'healthy',
+    service: 'FoodBillX Backend',
+    timestamp: new Date().toISOString(),
+    uptime: Math.floor(process.uptime()),
+    environment: process.env.NODE_ENV || 'development'
+  });
+};
+
+app.get('/health', healthHandler);
+app.get('/api/v1/health', healthHandler);
+
 // API V1 Endpoints
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/categories', categoryRoutes);
@@ -30,10 +55,6 @@ app.use('/api/v1/customers', customerRoutes);
 app.use('/api/v1/expenses', expenseRoutes);
 app.use('/api/v1/expense-categories', expenseCategoryRoutes);
 app.use('/api/v1/reports', reportRoutes);
-
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', message: 'FoodBillX POS Service is healthy' });
-});
 
 // Global Error Handler
 app.use(errorHandler);
