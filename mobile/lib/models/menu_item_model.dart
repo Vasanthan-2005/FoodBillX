@@ -70,6 +70,8 @@ class MenuItemModel {
     return map;
   }
 
+  String get imageUrl => image;
+
   double get finalPrice {
     final res = price - discount;
     return res < 0 ? 0 : res;

@@ -880,7 +880,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   DishImageWidget(
-                                    imageUrl: item.imageUrl,
+                                    imageUrl: item.image,
                                     fallbackEmoji: emoji,
                                     size: 34,
                                     borderRadius: 10,
