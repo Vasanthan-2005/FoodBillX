@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -22,10 +23,19 @@ class MenuManagementScreen extends ConsumerStatefulWidget {
 
 class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
   final _searchController = TextEditingController();
+  Timer? _searchDebounceTimer;
   bool _isGridView = false;
+
+  void _onSearchQueryChanged(String val) {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+      ref.read(menuProvider.notifier).setSearchQuery(val);
+    });
+  }
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -108,8 +118,8 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
         (categories.isNotEmpty ? categories.first.id : '');
     bool isVeg = existingItem?.isVeg ?? true;
     String selectedImage = existingItem?.image ?? '';
-
     final formKey = GlobalKey<FormState>();
+    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
@@ -144,14 +154,16 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Mandatory Dish Image Selector Card
+                      // Dish Image Selector Card
                       InkWell(
-                        onTap: () async {
-                          final picked = await ImagePickerService.showImageSourceDialog(modalCtx);
-                          if (picked != null) {
-                            setModalState(() => selectedImage = picked);
-                          }
-                        },
+                        onTap: isSaving
+                            ? null
+                            : () async {
+                                final picked = await ImagePickerService.showImageSourceDialog(modalCtx);
+                                if (picked != null) {
+                                  setModalState(() => selectedImage = picked);
+                                }
+                              },
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -160,7 +172,9 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                 : AppColors.lightBackground,
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: selectedImage.isEmpty ? Colors.amber.shade800 : AppColors.primary,
+                              color: selectedImage.isEmpty
+                                  ? Colors.grey.withAlpha(100)
+                                  : AppColors.primary,
                               width: 1.5,
                             ),
                           ),
@@ -178,11 +192,11 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      selectedImage.isEmpty ? 'Upload Dish Image *' : 'Dish Image Attached',
+                                      selectedImage.isEmpty ? 'Upload Dish Image (Optional)' : 'Dish Image Attached',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
-                                        color: selectedImage.isEmpty ? Colors.amber.shade800 : null,
+                                        color: selectedImage.isEmpty ? Colors.grey : null,
                                       ),
                                     ),
                                     const SizedBox(height: 2),
@@ -217,17 +231,20 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                 ),
                               )
                               .toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setModalState(() => selectedCatId = val);
-                            }
-                          },
+                          onChanged: isSaving
+                              ? null
+                              : (val) {
+                                  if (val != null) {
+                                    setModalState(() => selectedCatId = val);
+                                  }
+                                },
                         ),
                       const SizedBox(height: 12),
 
                       // Item Name
                       TextFormField(
                         controller: nameController,
+                        enabled: !isSaving,
                         decoration: const InputDecoration(
                           labelText: 'Item Name *',
                           hintText: 'Paneer Butter Masala',
@@ -244,6 +261,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                           Expanded(
                             child: TextFormField(
                               controller: priceController,
+                              enabled: !isSaving,
                               keyboardType: TextInputType.number,
                               decoration: const InputDecoration(
                                 labelText: 'Price *',
@@ -263,6 +281,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                           Expanded(
                             child: TextFormField(
                               controller: discountController,
+                              enabled: !isSaving,
                               keyboardType: TextInputType.number,
                               decoration: const InputDecoration(
                                 labelText: 'Discount (₹)',
@@ -282,80 +301,102 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                             label: const Text('🟢 Veg'),
                             selected: isVeg,
                             selectedColor: Colors.green.shade100,
-                            onSelected: (_) =>
-                                setModalState(() => isVeg = true),
+                            onSelected: isSaving
+                                ? null
+                                : (_) => setModalState(() => isVeg = true),
                           ),
                           const SizedBox(width: 8),
                           ChoiceChip(
                             label: const Text('🔴 Non-Veg'),
                             selected: !isVeg,
                             selectedColor: Colors.red.shade100,
-                            onSelected: (_) =>
-                                setModalState(() => isVeg = false),
+                            onSelected: isSaving
+                                ? null
+                                : (_) => setModalState(() => isVeg = false),
                           ),
                         ],
                       ),
                       const SizedBox(height: 20),
 
                       ElevatedButton(
-                        onPressed: () async {
-                          if (!formKey.currentState!.validate()) return;
-                          if (selectedImage.trim().isEmpty) {
-                            SnackbarUtils.showError(modalCtx, 'Dish image is mandatory! Please upload or capture a photo.');
-                            return;
-                          }
-                          Navigator.pop(ctx);
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                if (!formKey.currentState!.validate()) return;
+                                setModalState(() => isSaving = true);
 
-                          final gstVal =
-                              double.tryParse(gstController.text.trim()) ??
-                              defaultGst;
-                          final item = MenuItemModel(
-                            id: existingItem?.id ?? '',
-                            categoryId: selectedCatId,
-                            name: nameController.text.trim(),
-                            description: '',
-                            price: double.parse(priceController.text.trim()),
-                            discount:
-                                double.tryParse(
-                                  discountController.text.trim(),
-                                ) ??
-                                0.0,
-                            gstPercentage: gstVal,
-                            image: selectedImage,
-                            isVeg: isVeg,
-                            isAvailable: existingItem?.isAvailable ?? true,
-                          );
+                                final gstVal =
+                                    double.tryParse(gstController.text.trim()) ??
+                                    defaultGst;
+                                final item = MenuItemModel(
+                                  id: existingItem?.id ?? '',
+                                  categoryId: selectedCatId,
+                                  name: nameController.text.trim(),
+                                  description: '',
+                                  price: double.parse(priceController.text.trim()),
+                                  discount:
+                                      double.tryParse(
+                                        discountController.text.trim(),
+                                      ) ??
+                                      0.0,
+                                  gstPercentage: gstVal,
+                                  image: selectedImage.trim(),
+                                  isVeg: isVeg,
+                                  isAvailable: existingItem?.isAvailable ?? true,
+                                );
 
-                          bool ok;
-                          if (existingItem == null) {
-                            ok = await ref
-                                .read(menuProvider.notifier)
-                                .createMenuItem(item);
-                          } else {
-                            ok = await ref
-                                .read(menuProvider.notifier)
-                                .updateMenuItem(item);
-                          }
+                                bool ok = false;
+                                try {
+                                  if (existingItem == null) {
+                                    ok = await ref
+                                        .read(menuProvider.notifier)
+                                        .createMenuItem(item);
+                                  } else {
+                                    ok = await ref
+                                        .read(menuProvider.notifier)
+                                        .updateMenuItem(item);
+                                  }
+                                } catch (_) {
+                                  ok = false;
+                                }
 
-                          if (mounted) {
-                            if (ok) {
-                              SnackbarUtils.showSuccess(
-                                context,
-                                existingItem == null
-                                    ? 'Item "${item.name}" added'
-                                    : 'Item "${item.name}" updated',
-                              );
-                            } else {
-                              SnackbarUtils.showError(
-                                context,
-                                'Failed to save item. Try again.',
-                              );
-                            }
-                          }
-                        },
-                        child: Text(
-                          existingItem == null ? 'ADD ITEM' : 'SAVE CHANGES',
-                        ),
+                                if (modalCtx.mounted) {
+                                  Navigator.pop(modalCtx);
+                                }
+
+                                if (mounted) {
+                                  if (ok) {
+                                    await ref
+                                        .read(menuProvider.notifier)
+                                        .loadCategoriesAndItems(forceSpinner: false);
+                                    if (mounted) {
+                                      SnackbarUtils.showSuccess(
+                                        context,
+                                        existingItem == null
+                                            ? 'Dish "${item.name}" created successfully!'
+                                            : 'Dish "${item.name}" updated successfully!',
+                                      );
+                                    }
+                                  } else {
+                                    SnackbarUtils.showError(
+                                      context,
+                                      'Failed to save dish. Please check database connection.',
+                                    );
+                                  }
+                                }
+                              },
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                existingItem == null ? 'ADD DISH' : 'SAVE CHANGES',
+                              ),
                       ),
                     ],
                   ),
@@ -365,8 +406,13 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
           },
         );
       },
-    );
-  }
+    ).whenComplete(() {
+        nameController.dispose();
+        priceController.dispose();
+        discountController.dispose();
+        gstController.dispose();
+      });
+    }
 
   @override
   Widget build(BuildContext context) {
@@ -413,8 +459,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
             child: TextField(
               controller: _searchController,
-              onChanged: (val) =>
-                  ref.read(menuProvider.notifier).setSearchQuery(val),
+              onChanged: _onSearchQueryChanged,
               decoration: InputDecoration(
                 hintText: 'Search menu items...',
                 prefixIcon: const Icon(Icons.search_rounded),
@@ -423,7 +468,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                         icon: const Icon(Icons.clear_rounded),
                         onPressed: () {
                           _searchController.clear();
-                          ref.read(menuProvider.notifier).setSearchQuery('');
+                          _onSearchQueryChanged('');
                         },
                       )
                     : null,

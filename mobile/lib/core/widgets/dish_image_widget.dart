@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import '../constants/app_colors.dart';
 
 class DishImageWidget extends StatelessWidget {
   final String? imageUrl;
@@ -22,20 +21,41 @@ class DishImageWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final showLabel = size >= 60;
     Widget placeholderWidget = Container(
       width: size,
       height: size,
+      padding: EdgeInsets.all(showLabel ? 4 : 2),
       decoration: BoxDecoration(
-        color: isDark
-            ? AppColors.primary.withAlpha(30)
-            : AppColors.primary.withAlpha(15),
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(borderRadius),
-      ),
-      child: Center(
-        child: Text(
-          fallbackEmoji,
-          style: TextStyle(fontSize: size * 0.5),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          width: 1,
         ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.image_not_supported_outlined,
+            size: showLabel ? size * 0.35 : size * 0.45,
+            color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+          ),
+          if (showLabel) ...[
+            const SizedBox(height: 2),
+            Text(
+              'No Preview',
+              maxLines: 1,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: (size * 0.15).clamp(8.0, 11.0),
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ],
       ),
     );
 

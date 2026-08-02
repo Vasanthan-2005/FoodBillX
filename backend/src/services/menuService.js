@@ -82,6 +82,8 @@ class MenuService {
   }
 
   async createMenuItem(data) {
+    if (data.id === '') delete data.id;
+    if (data._id === '') delete data._id;
     const categoryExists = await Category.findOne({ _id: data.category, isActive: true });
     if (!categoryExists) {
       throw new AppError('Invalid category selected', 400);

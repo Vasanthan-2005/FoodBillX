@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -26,9 +27,18 @@ class BillingScreen extends ConsumerStatefulWidget {
 
 class _BillingScreenState extends ConsumerState<BillingScreen> {
   final _searchController = TextEditingController();
+  Timer? _searchDebounceTimer;
+
+  void _onSearchInputChanged(String val) {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -769,7 +779,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: TextField(
             controller: _searchController,
-            onChanged: (val) => setState(() {}),
+            onChanged: _onSearchInputChanged,
             decoration: InputDecoration(
               hintText: 'Search food dishes...',
               prefixIcon: const Icon(Icons.search_rounded),
@@ -778,7 +788,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       icon: const Icon(Icons.clear_rounded),
                       onPressed: () {
                         _searchController.clear();
-                        setState(() {});
+                        _onSearchInputChanged('');
                       },
                     )
                   : null,

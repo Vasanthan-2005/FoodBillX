@@ -52,8 +52,7 @@ class MenuItemModel {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
+    final map = <String, dynamic>{
       'category': categoryId,
       'name': name,
       'description': description,
@@ -64,6 +63,11 @@ class MenuItemModel {
       'isVeg': isVeg,
       'isAvailable': isAvailable,
     };
+    if (id.trim().isNotEmpty) {
+      map['id'] = id;
+      map['_id'] = id;
+    }
+    return map;
   }
 
   double get finalPrice {
