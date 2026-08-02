@@ -138,7 +138,6 @@ class RevenueLineChartWidget extends StatelessWidget {
                       getTooltipColor: (spot) => isDark
                           ? const Color(0xFF1E293B)
                           : const Color(0xFF0F172A),
-                      tooltipRoundedRadius: 10,
                       getTooltipItems: (touchedSpots) {
                         return touchedSpots.map((spot) {
                           final idx = spot.x.toInt();
