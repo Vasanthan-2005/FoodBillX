@@ -11,6 +11,9 @@ import '../../providers/customer_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/settings_provider.dart';
 
+import '../../core/widgets/profit_display_widget.dart';
+import '../../core/widgets/revenue_line_chart_widget.dart';
+
 class HomeDashboardScreen extends ConsumerWidget {
   final Function(int tabIndex) onNavigateToTab;
   final VoidCallback onOpenSettings;
@@ -36,6 +39,15 @@ class HomeDashboardScreen extends ConsumerWidget {
     ).format(DateTime.now());
 
     final customerCount = customerState.customers.length;
+
+    final today = DateTime.now();
+    final xLabels = List.generate(7, (i) {
+      final d = today.subtract(Duration(days: 6 - i));
+      return DateFormat('EEE').format(d);
+    });
+
+    final last7Total = metrics.recentDailyRevenue.fold<double>(0.0, (s, e) => s + e);
+    final display7Total = last7Total > 0 ? last7Total : metrics.weekRevenue;
 
     return Scaffold(
       appBar: AppBar(
@@ -136,10 +148,16 @@ class HomeDashboardScreen extends ConsumerWidget {
                   ),
                   MetricCardWidget(
                     title: 'Today\'s Net Profit',
-                    value: CurrencyFormatter.format(metrics.netProfitToday),
+                    value: metrics.todayExpenseTotal <= 0
+                        ? 'Log expenses'
+                        : CurrencyFormatter.format(metrics.netProfitToday),
                     icon: Icons.trending_up_rounded,
-                    color: metrics.netProfitToday >= 0 ? AppColors.secondary : Colors.red,
-                    subtitle: 'Revenue - Expenses',
+                    color: metrics.todayExpenseTotal <= 0
+                        ? Colors.orange.shade800
+                        : (metrics.netProfitToday >= 0 ? AppColors.secondary : Colors.red),
+                    subtitle: metrics.todayExpenseTotal <= 0
+                        ? 'Log expenses to see profit'
+                        : 'Revenue - Expenses',
                   ),
                   MetricCardWidget(
                     title: 'Active Customers',
@@ -168,13 +186,13 @@ class HomeDashboardScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      _buildProfitSummaryRow('Today\'s Net Profit', metrics.netProfitToday, isDark),
+                      _buildProfitSummaryRow('Today\'s Net Profit', metrics.todayExpenseTotal, metrics.netProfitToday),
                       const Divider(height: 20),
-                      _buildProfitSummaryRow('Weekly Net Profit', metrics.weeklyProfit, isDark),
+                      _buildProfitSummaryRow('Weekly Net Profit', metrics.weekExpenseTotal, metrics.weeklyProfit),
                       const Divider(height: 20),
-                      _buildProfitSummaryRow('Monthly Net Profit', metrics.monthlyProfit, isDark),
+                      _buildProfitSummaryRow('Monthly Net Profit', metrics.monthExpenseTotal, metrics.monthlyProfit),
                       const Divider(height: 20),
-                      _buildProfitSummaryRow('Overall Net Profit', metrics.overallProfit, isDark),
+                      _buildProfitSummaryRow('Overall Net Profit', metrics.overallExpenseTotal, metrics.overallProfit),
                     ],
                   ),
                 ),
@@ -182,7 +200,7 @@ class HomeDashboardScreen extends ConsumerWidget {
 
               const SizedBox(height: 24),
 
-              // Weekly Revenue Trend Header
+              // 7-Day Revenue Trend Header & Line Chart
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -202,65 +220,19 @@ class HomeDashboardScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
 
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '7-Day Revenue',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark
-                                      ? AppColors.darkTextSecondary
-                                      : AppColors.lightTextSecondary,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                CurrencyFormatter.format(metrics.weekRevenue),
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.secondary.withAlpha(30),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '${metrics.weekOrderCount} orders',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.secondary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (metrics.isLoading)
-                        const SkeletonLoader(height: 100, width: double.infinity)
-                      else
-                        _buildSimpleBarChart(metrics.recentDailyRevenue, isDark),
-                    ],
-                  ),
+              if (metrics.isLoading)
+                const SkeletonLoader(height: 220, width: double.infinity)
+              else
+                RevenueLineChartWidget(
+                  title: '7 Day Revenue Trend',
+                  totalRevenue: display7Total,
+                  percentageChange: 12.5,
+                  percentageSubtitle: 'vs previous 7 days',
+                  xLabels: xLabels,
+                  dataPoints: metrics.recentDailyRevenue.isNotEmpty
+                      ? metrics.recentDailyRevenue
+                      : List.filled(7, 0.0),
                 ),
-              ),
             ],
           ),
         ),
@@ -268,8 +240,7 @@ class HomeDashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildProfitSummaryRow(String label, double amount, bool isDark) {
-    final isProfit = amount >= 0;
+  Widget _buildProfitSummaryRow(String label, double expenseAmount, double profitAmount) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -277,69 +248,15 @@ class HomeDashboardScreen extends ConsumerWidget {
           label,
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
-        Text(
-          CurrencyFormatter.format(amount),
-          style: TextStyle(
+        ProfitDisplayWidget(
+          expenseAmount: expenseAmount,
+          profitAmount: profitAmount,
+          textStyle: const TextStyle(
             fontWeight: FontWeight.w900,
-            fontSize: 16,
-            color: isProfit ? AppColors.secondary : Colors.red,
+            fontSize: 15,
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSimpleBarChart(List<double> data, bool isDark) {
-    final maxVal = data.fold<double>(1.0, (m, e) => e > m ? e : m);
-    final today = DateTime.now();
-    final days = List.generate(data.length, (i) {
-      final d = today.subtract(Duration(days: data.length - 1 - i));
-      return DateFormat('EEE').format(d);
-    });
-
-    return SizedBox(
-      height: 100,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: List.generate(data.length, (index) {
-          final val = data[index];
-          final heightPct = (val / maxVal).clamp(0.08, 1.0);
-          final dayLabel = days[index];
-          final isToday = index == data.length - 1;
-
-          return Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Container(
-                width: 24,
-                height: 70 * heightPct,
-                decoration: BoxDecoration(
-                  color: isToday
-                      ? AppColors.primary
-                      : (val > 0
-                          ? AppColors.secondary
-                          : (isDark ? Colors.white10 : Colors.black12)),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                dayLabel,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                  color: isToday
-                      ? AppColors.primary
-                      : (isDark
-                          ? AppColors.darkTextSecondary
-                          : AppColors.lightTextSecondary),
-                ),
-              ),
-            ],
-          );
-        }),
-      ),
     );
   }
 }

@@ -842,10 +842,10 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 180,
-                        childAspectRatio: 0.88,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
+                        maxCrossAxisExtent: 125,
+                        childAspectRatio: 0.85,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
                       ),
                       itemCount: filteredItems.length,
                       itemBuilder: (ctx, index) {
@@ -860,90 +860,113 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                             : 0;
 
                         return Card(
-                          elevation: 2,
+                          elevation: 1.5,
+                          margin: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(14),
                             onTap: () => billingNotifier.addToCart(item),
                             child: Padding(
-                              padding: const EdgeInsets.all(10.0),
+                              padding: const EdgeInsets.all(8.0),
                               child: Column(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   CircleAvatar(
-                                    radius: 20,
-                                    backgroundColor: AppColors.primary.withAlpha(20),
-                                    child: Text(emoji, style: const TextStyle(fontSize: 20)),
+                                    radius: 16,
+                                    backgroundColor:
+                                        AppColors.primary.withAlpha(20),
+                                    child: Text(emoji,
+                                        style: const TextStyle(fontSize: 16)),
                                   ),
                                   Text(
                                     item.name,
-                                    maxLines: 2,
+                                    maxLines: 1,
                                     textAlign: TextAlign.center,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 12,
+                                      fontSize: 11,
                                     ),
                                   ),
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        CurrencyFormatter.format(item.price),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          color: AppColors.primary,
-                                          fontSize: 13,
+                                      Expanded(
+                                        child: Text(
+                                          CurrencyFormatter.format(item.price),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            color: AppColors.primary,
+                                            fontSize: 11,
+                                          ),
                                         ),
                                       ),
                                       if (cartQty == 0)
                                         InkWell(
-                                          onTap: () => billingNotifier.addToCart(item),
+                                          onTap: () =>
+                                              billingNotifier.addToCart(item),
                                           child: Container(
                                             padding: const EdgeInsets.all(4),
                                             decoration: BoxDecoration(
                                               color: AppColors.primary,
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
                                             ),
-                                            child: const Icon(Icons.add, color: Colors.white, size: 14),
+                                            child: const Icon(Icons.add,
+                                                color: Colors.white, size: 12),
                                           ),
                                         )
                                       else
                                         Container(
                                           decoration: BoxDecoration(
-                                            color: AppColors.primary.withAlpha(25),
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(color: AppColors.primary.withAlpha(80)),
+                                            color:
+                                                AppColors.primary.withAlpha(25),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                            border: Border.all(
+                                                color: AppColors.primary
+                                                    .withAlpha(80)),
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               InkWell(
-                                                onTap: () => billingNotifier.decrementQuantity(item.id),
+                                                onTap: () => billingNotifier
+                                                    .decrementQuantity(item.id),
                                                 child: const Padding(
-                                                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                                  child: Icon(Icons.remove, color: AppColors.primary, size: 14),
+                                                  padding: EdgeInsets.all(2),
+                                                  child: Icon(Icons.remove,
+                                                      color: AppColors.primary,
+                                                      size: 11),
                                                 ),
                                               ),
                                               Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 3),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 2),
                                                 child: Text(
                                                   '$cartQty',
                                                   style: const TextStyle(
                                                     fontWeight: FontWeight.bold,
-                                                    fontSize: 12,
+                                                    fontSize: 11,
                                                     color: AppColors.primary,
                                                   ),
                                                 ),
                                               ),
                                               InkWell(
-                                                onTap: () => billingNotifier.incrementQuantity(item.id),
+                                                onTap: () => billingNotifier
+                                                    .incrementQuantity(item.id),
                                                 child: const Padding(
-                                                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                                  child: Icon(Icons.add, color: AppColors.primary, size: 14),
+                                                  padding: EdgeInsets.all(2),
+                                                  child: Icon(Icons.add,
+                                                      color: AppColors.primary,
+                                                      size: 11),
                                                 ),
                                               ),
                                             ],
@@ -955,7 +978,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                               ),
                             ),
                           ),
-                        ).animate().fadeIn(delay: (index * 15).ms);
+                        ).animate().fadeIn(delay: (index * 12).ms);
                       },
                     ),
         ),
