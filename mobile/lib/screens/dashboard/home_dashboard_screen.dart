@@ -14,6 +14,8 @@ import '../../providers/settings_provider.dart';
 import '../../core/widgets/profit_display_widget.dart';
 import '../../core/widgets/revenue_line_chart_widget.dart';
 
+import '../../core/widgets/live_badge_widget.dart';
+
 class HomeDashboardScreen extends ConsumerWidget {
   final Function(int tabIndex) onNavigateToTab;
   final VoidCallback onOpenSettings;
@@ -85,6 +87,12 @@ class HomeDashboardScreen extends ConsumerWidget {
           ],
         ),
         actions: [
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.only(right: 6.0),
+              child: LiveBadgeWidget(),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.receipt_long_rounded),
             tooltip: 'Previous Orders',

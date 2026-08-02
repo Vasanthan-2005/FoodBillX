@@ -12,6 +12,8 @@ import '../../core/widgets/skeleton_loader.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/settings_provider.dart';
 
+import '../../core/widgets/live_badge_widget.dart';
+
 class DashboardScreen extends ConsumerStatefulWidget {
   final VoidCallback onGoToBilling;
   final VoidCallback onOpenSettings;
@@ -104,6 +106,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ],
         ),
         actions: [
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.only(right: 6.0),
+              child: LiveBadgeWidget(),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_rounded),
             tooltip: 'Export PDF Report',
@@ -244,6 +252,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     RevenueLineChartWidget(
                       title: 'Revenue Overview',
                       totalRevenue: currentRevenue,
+                      totalProfit: currentProfit,
+                      expenseAmount: currentExpenses,
                       percentageChange: pctChange,
                       percentageSubtitle: '',
                       xLabels: chartXLabels,

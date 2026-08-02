@@ -13,6 +13,8 @@ import '../../providers/billing_provider.dart';
 import '../../providers/customer_provider.dart';
 import '../../providers/menu_provider.dart';
 
+import '../../core/widgets/live_badge_widget.dart';
+
 class BillingScreen extends ConsumerStatefulWidget {
   final VoidCallback onOpenSettings;
   const BillingScreen({super.key, required this.onOpenSettings});
@@ -624,6 +626,12 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       appBar: AppBar(
         title: const Text('POS Billing & Checkout'),
         actions: [
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.only(right: 8.0),
+              child: LiveBadgeWidget(),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
@@ -678,51 +686,56 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     right: 16,
                     bottom: 16,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppColors.primary, AppColors.secondary],
+                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                         ),
-                        borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primary.withAlpha(90),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
+                            color: Colors.black.withAlpha(isDark ? 120 : 40),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
                           ),
                         ],
                       ),
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
-                              color: Colors.white24,
-                              borderRadius: BorderRadius.circular(10),
+                              color: AppColors.primary.withAlpha(25),
+                              borderRadius: BorderRadius.circular(14),
                             ),
                             child: Text(
-                              '${billingState.totalItemCount} items',
+                              '${billingState.totalItemCount} Items',
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: AppColors.primary,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Text(
+                                Text(
                                   'Cart Total',
-                                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: isDark
+                                        ? AppColors.darkTextSecondary
+                                        : AppColors.lightTextSecondary,
+                                  ),
                                 ),
                                 Text(
                                   CurrencyFormatter.format(billingState.grandTotal),
                                   style: const TextStyle(
-                                    color: Colors.white,
                                     fontWeight: FontWeight.w900,
                                     fontSize: 16,
                                   ),
@@ -730,20 +743,47 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                               ],
                             ),
                           ),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: AppColors.primary,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFF5722), Color(0xFFE91E63)],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
                               ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFF5722).withAlpha(90),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
-                            onPressed: _showCheckoutBottomSheet,
-                            icon: const Icon(Icons.shopping_cart_checkout_rounded, size: 18),
-                            label: const Text(
-                              'Checkout to Bill',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(16),
+                                onTap: _showCheckoutBottomSheet,
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.shopping_cart_checkout_rounded, color: Colors.white, size: 16),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Checkout to Bill',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 14),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ],

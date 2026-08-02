@@ -21,13 +21,24 @@ class ProfitDisplayWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (expenseAmount <= 0) {
-      return Text(
-        'Log expenses to see profit',
-        style: TextStyle(
-          color: Colors.orange.shade800,
-          fontWeight: FontWeight.bold,
-          fontSize: textStyle?.fontSize ?? 13,
-        ),
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Log expense to see profit',
+            style: TextStyle(
+              color: Colors.orange.shade800,
+              fontWeight: FontWeight.bold,
+              fontSize: textStyle?.fontSize ?? 13,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(
+            Icons.info_outline_rounded,
+            size: (textStyle?.fontSize ?? 13) + 2,
+            color: Colors.orange.shade800,
+          ),
+        ],
       );
     }
 
