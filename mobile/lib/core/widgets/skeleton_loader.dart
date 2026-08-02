@@ -94,3 +94,26 @@ class MetricCardSkeleton extends StatelessWidget {
     );
   }
 }
+
+class GridSkeletonLoader extends StatelessWidget {
+  const GridSkeletonLoader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 190,
+        childAspectRatio: 0.85,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: 6,
+      itemBuilder: (ctx, idx) => const SkeletonLoader(
+        width: double.infinity,
+        height: 140,
+        borderRadius: 16,
+      ),
+    );
+  }
+}

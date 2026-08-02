@@ -3,6 +3,7 @@ import '../models/expense_category_model.dart';
 import '../models/expense_model.dart';
 import '../repositories/expense_category_repository.dart';
 import '../repositories/expense_repository.dart';
+import 'dashboard_provider.dart';
 
 class ExpenseState {
   final List<ExpenseModel> expenses;
@@ -44,8 +45,9 @@ class ExpenseState {
 class ExpenseNotifier extends StateNotifier<ExpenseState> {
   final ExpenseRepository _expenseRepo;
   final ExpenseCategoryRepository _catRepo;
+  final Ref _ref;
 
-  ExpenseNotifier(this._expenseRepo, this._catRepo)
+  ExpenseNotifier(this._expenseRepo, this._catRepo, this._ref)
     : super(ExpenseState.initial()) {
     loadAll();
   }
@@ -87,6 +89,18 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     try {
       await _expenseRepo.create(data);
       await loadAll(forceSpinner: false);
+      _ref.read(dashboardProvider.notifier).refresh();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> updateExpense(String id, Map<String, dynamic> data) async {
+    try {
+      await _expenseRepo.update(id, data);
+      await loadAll(forceSpinner: false);
+      _ref.read(dashboardProvider.notifier).refresh();
       return true;
     } catch (_) {
       return false;
@@ -97,6 +111,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     try {
       await _expenseRepo.delete(id);
       await loadAll(forceSpinner: false);
+      _ref.read(dashboardProvider.notifier).refresh();
       return true;
     } catch (_) {
       return false;
@@ -129,5 +144,5 @@ final expenseProvider = StateNotifierProvider<ExpenseNotifier, ExpenseState>((
 ) {
   final expenseRepo = ref.watch(expenseRepositoryProvider);
   final catRepo = ref.watch(expenseCategoryRepositoryProvider);
-  return ExpenseNotifier(expenseRepo, catRepo);
+  return ExpenseNotifier(expenseRepo, catRepo, ref);
 });

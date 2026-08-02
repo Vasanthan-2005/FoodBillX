@@ -20,6 +20,15 @@ class ExpenseController {
     }
   }
 
+  async updateExpense(req, res, next) {
+    try {
+      const expense = await expenseService.updateExpense(req.params.id, req.body);
+      return sendSuccess(res, 200, 'Expense updated successfully', { expense });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async deleteExpense(req, res, next) {
     try {
       const result = await expenseService.deleteExpense(req.params.id);

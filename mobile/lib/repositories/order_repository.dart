@@ -15,7 +15,8 @@ class OrderRepository {
     DateTime? startDate,
     DateTime? endDate,
     String? paymentMethod,
-    int limit = 50,
+    String? status,
+    int limit = 100,
     int offset = 0,
   }) async {
     final queryParams = <String, dynamic>{
@@ -24,6 +25,9 @@ class OrderRepository {
     };
     if (paymentMethod != null && paymentMethod.isNotEmpty) {
       queryParams['paymentMethod'] = paymentMethod;
+    }
+    if (status != null && status.isNotEmpty) {
+      queryParams['status'] = status;
     }
     if (startDate != null) {
       queryParams['startDate'] = startDate.toIso8601String();
@@ -55,10 +59,11 @@ class OrderRepository {
   }
 
   Future<OrderModel> create({
-    required String orderNumber,
+    String? orderNumber,
     String? customerServerId,
     required String customerName,
     required String customerPhone,
+    String loyaltyCardNumber = '',
     required List<OrderItemModel> items,
     required double subtotal,
     required double discountAmount,
@@ -69,10 +74,11 @@ class OrderRepository {
     String notes = '',
   }) async {
     final payload = {
-      'orderNumber': orderNumber,
+      if (orderNumber != null && orderNumber.isNotEmpty) 'orderNumber': orderNumber,
       'customerId': customerServerId,
       'customerName': customerName,
       'customerPhone': customerPhone,
+      'loyaltyCardNumber': loyaltyCardNumber,
       'paymentMethod': paymentMethod,
       'discountAmount': discountAmount,
       'serviceChargeAmount': serviceChargeAmount,
@@ -86,6 +92,18 @@ class OrderRepository {
     );
     final rawItem = ApiResponseParser.extractMap(response.data, ['order']);
     return OrderModel.fromJson(rawItem);
+  }
+
+  Future<OrderModel> refund(String orderId) async {
+    final response = await _apiClient.dio.post(
+      '${ApiEndpoints.orders}/$orderId/refund',
+    );
+    final rawItem = ApiResponseParser.extractMap(response.data, ['order']);
+    return OrderModel.fromJson(rawItem);
+  }
+
+  Future<void> delete(String orderId) async {
+    await _apiClient.dio.delete('${ApiEndpoints.orders}/$orderId');
   }
 
   Future<List<OrderModel>> getBetween(DateTime start, DateTime end) async {

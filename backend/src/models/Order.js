@@ -51,6 +51,23 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    loyaltyCardNumber: {
+      type: String,
+      default: '',
+    },
+    visitCount: {
+      type: Number,
+      default: 1,
+    },
+    rewardStatus: {
+      type: String,
+      default: '',
+    },
+    orderStatus: {
+      type: String,
+      enum: ['completed', 'edited', 'refunded'],
+      default: 'completed',
+    },
     items: [orderItemSchema],
     subtotal: {
       type: Number,

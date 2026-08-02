@@ -1,13 +1,19 @@
 const Expense = require('../models/Expense');
 const AppError = require('../utils/appError');
-const recordSyncDeletion = require('../utils/recordSyncDeletion');
 
 class ExpenseService {
   async getExpenses(query = {}) {
-    const { startDate, endDate, category } = query;
+    const { startDate, endDate, category, search } = query;
     const filter = {};
 
     if (category) filter.category = { $regex: category, $options: 'i' };
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { category: { $regex: search, $options: 'i' } },
+        { notes: { $regex: search, $options: 'i' } },
+      ];
+    }
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
@@ -21,18 +27,30 @@ class ExpenseService {
   }
 
   async createExpense(expenseData) {
-    // Auto-set title from category name so category is the identifier
     const data = {
       ...expenseData,
-      title: expenseData.category || expenseData.title || 'Expense',
+      title: expenseData.title || expenseData.name || expenseData.category || 'Expense',
+      category: expenseData.category || 'Miscellaneous',
     };
     return await Expense.create(data);
+  }
+
+  async updateExpense(expenseId, expenseData) {
+    const expense = await Expense.findByIdAndUpdate(
+      expenseId,
+      {
+        ...expenseData,
+        title: expenseData.title || expenseData.name || expenseData.category,
+      },
+      { new: true, runValidators: true }
+    );
+    if (!expense) throw new AppError('Expense record not found', 404);
+    return expense;
   }
 
   async deleteExpense(expenseId) {
     const expense = await Expense.findByIdAndDelete(expenseId);
     if (!expense) throw new AppError('Expense record not found', 404);
-    await recordSyncDeletion('expense', expense._id);
     return { message: 'Expense record deleted' };
   }
 }

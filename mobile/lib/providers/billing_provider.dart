@@ -1,22 +1,37 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/utils/pdf_invoice_helper.dart';
 import '../models/cart_item_model.dart';
+import '../models/customer_model.dart';
 import '../models/menu_item_model.dart';
 import '../models/order_model.dart';
 import '../repositories/order_repository.dart';
+import 'customer_provider.dart';
+import 'dashboard_provider.dart';
+import 'orders_provider.dart';
 import 'settings_provider.dart';
 
 class CheckoutResult {
   final String orderNumber;
   final File? invoiceFile;
   final String? warning;
+  final String customerPhone;
+  final String customerName;
+  final String loyaltyCardNumber;
+  final int visitCount;
+  final String rewardStatus;
+  final double grandTotal;
 
   const CheckoutResult({
     required this.orderNumber,
     this.invoiceFile,
     this.warning,
+    required this.customerPhone,
+    required this.customerName,
+    required this.loyaltyCardNumber,
+    required this.visitCount,
+    required this.rewardStatus,
+    required this.grandTotal,
   });
 }
 
@@ -25,6 +40,11 @@ class BillingState {
   final String customerName;
   final String customerPhone;
   final String? customerId;
+  final String loyaltyCardNumber;
+  final int currentVisitCount;
+  final String rewardStatus;
+  final bool isRewardEligible;
+
   final String paymentMethod;
   final double discountAmount;
   final double serviceChargePercentage;
@@ -36,6 +56,10 @@ class BillingState {
     this.customerName = 'Walk-in Customer',
     this.customerPhone = '',
     this.customerId,
+    this.loyaltyCardNumber = '',
+    this.currentVisitCount = 1,
+    this.rewardStatus = '',
+    this.isRewardEligible = false,
     this.paymentMethod = 'cash',
     this.discountAmount = 0.0,
     this.serviceChargePercentage = 0.0,
@@ -65,21 +89,10 @@ class BillingState {
     return res < 0 ? 0 : res;
   }
 
-  double get gstAmount {
-    final itemNetSubtotal =
-        subtotal -
-        cartItems.fold(0.0, (sum, item) => sum + item.discountAmount);
-    if (itemNetSubtotal <= 0 || subtotalAfterDiscount <= 0) return 0;
-    final taxBeforeOrderDiscount = cartItems.fold(0.0, (sum, item) {
-      final itemNet = item.menuItem.finalPrice * item.quantity;
-      return sum + (itemNet * item.menuItem.gstPercentage / 100);
-    });
-    return taxBeforeOrderDiscount * subtotalAfterDiscount / itemNetSubtotal;
-  }
+  double get gstAmount => 0.0;
 
   double get grandTotal {
-    return (subtotalAfterDiscount + gstAmount + serviceChargeAmount)
-        .roundToDouble();
+    return (subtotalAfterDiscount + serviceChargeAmount).roundToDouble();
   }
 
   double get serviceChargeAmount =>
@@ -94,6 +107,10 @@ class BillingState {
     String? customerName,
     String? customerPhone,
     String? customerId,
+    String? loyaltyCardNumber,
+    int? currentVisitCount,
+    String? rewardStatus,
+    bool? isRewardEligible,
     bool clearCustomer = false,
     String? paymentMethod,
     double? discountAmount,
@@ -108,6 +125,10 @@ class BillingState {
           : (customerName ?? this.customerName),
       customerPhone: clearCustomer ? '' : (customerPhone ?? this.customerPhone),
       customerId: clearCustomer ? null : (customerId ?? this.customerId),
+      loyaltyCardNumber: clearCustomer ? '' : (loyaltyCardNumber ?? this.loyaltyCardNumber),
+      currentVisitCount: clearCustomer ? 1 : (currentVisitCount ?? this.currentVisitCount),
+      rewardStatus: clearCustomer ? '' : (rewardStatus ?? this.rewardStatus),
+      isRewardEligible: clearCustomer ? false : (isRewardEligible ?? this.isRewardEligible),
       paymentMethod: paymentMethod ?? this.paymentMethod,
       discountAmount: discountAmount ?? this.discountAmount,
       serviceChargePercentage:
@@ -176,12 +197,100 @@ class BillingNotifier extends StateNotifier<BillingState> {
     state = state.copyWith(cartItems: list);
   }
 
-  void setCustomerInfo({String? name, String? phone, String? id}) {
+  Future<CustomerModel?> lookupAndSelectByLoyaltyCard(String cardNumber) async {
+    final card = cardNumber.trim();
+    if (card.isEmpty) return null;
+
+    final customerNotifier = _ref.read(customerProvider.notifier);
+    final customer = await customerNotifier.searchByLoyaltyCardNumber(card);
+
+    if (customer != null) {
+      selectCustomer(customer);
+    }
+    return customer;
+  }
+
+  void selectCustomer(CustomerModel customer) {
+    final settings = _ref.read(settingsProvider).settings;
+    final targetVisits = settings?.loyaltyTargetVisits ?? 6;
+    final rewardType = settings?.loyaltyRewardType ?? 'Free Drink';
+
+    final nextVisits = customer.totalVisits + 1;
+    final isEligible = (nextVisits % targetVisits == 0);
+    final rewardText = isEligible
+        ? '🎉 Loyalty Reward Available: $rewardType'
+        : 'Visit #$nextVisits (${targetVisits - (nextVisits % targetVisits)} more visits for $rewardType)';
+
     state = state.copyWith(
-      customerName: name ?? 'Walk-in Customer',
-      customerPhone: phone ?? '',
-      customerId: id,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      customerId: customer.id,
+      loyaltyCardNumber: customer.loyaltyCardNumber,
+      currentVisitCount: nextVisits,
+      rewardStatus: rewardText,
+      isRewardEligible: isEligible,
     );
+  }
+
+  Future<CustomerModel?> quickRegisterCustomerAndSelect({
+    required String name,
+    required String phone,
+    required String loyaltyCardNumber,
+  }) async {
+    final customerNotifier = _ref.read(customerProvider.notifier);
+    final created = await customerNotifier.quickCreateCustomer(
+      name: name.trim(),
+      phone: phone.trim(),
+      loyaltyCardNumber: loyaltyCardNumber.trim(),
+    );
+
+    if (created != null) {
+      selectCustomer(created);
+    }
+    return created;
+  }
+
+  void setCustomerInfo({
+    String? name,
+    String? phone,
+    String? id,
+    String? loyaltyCardNumber,
+    int? visits,
+  }) {
+    final settings = _ref.read(settingsProvider).settings;
+    final targetVisits = settings?.loyaltyTargetVisits ?? 6;
+    final rewardType = settings?.loyaltyRewardType ?? 'Free Drink';
+
+    final effectivePhone = phone ?? state.customerPhone;
+    CustomerModel? matchedCustomer;
+
+    if (effectivePhone.isNotEmpty) {
+      matchedCustomer = _ref.read(customerProvider.notifier).findByPhone(effectivePhone);
+    }
+
+    final custName = name ?? matchedCustomer?.name ?? (effectivePhone.isNotEmpty ? 'Registered Customer' : 'Walk-in Customer');
+    final custId = id ?? matchedCustomer?.id;
+    final custCard = loyaltyCardNumber ?? matchedCustomer?.loyaltyCardNumber ?? '';
+    final nextVisits = (visits ?? matchedCustomer?.totalVisits ?? 0) + 1;
+
+    final isEligible = (nextVisits % targetVisits == 0);
+    final rewardText = isEligible
+        ? '🎉 Loyalty Reward Available: $rewardType'
+        : 'Visit #$nextVisits (${targetVisits - (nextVisits % targetVisits)} more visits for $rewardType)';
+
+    state = state.copyWith(
+      customerName: custName,
+      customerPhone: effectivePhone,
+      customerId: custId,
+      loyaltyCardNumber: custCard,
+      currentVisitCount: nextVisits,
+      rewardStatus: rewardText,
+      isRewardEligible: isEligible,
+    );
+  }
+
+  void clearCustomer() {
+    state = state.copyWith(clearCustomer: true);
   }
 
   void setPaymentMethod(String method) {
@@ -203,14 +312,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
     );
   }
 
-  String _generateOrderNumber(String prefix) {
-    final now = DateTime.now();
-    final dateStr =
-        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-    final rand = Random().nextInt(9000) + 1000;
-    return '$prefix$dateStr-$rand';
-  }
-
   Future<CheckoutResult?> checkoutAndGenerateInvoice() async {
     if (state.cartItems.isEmpty) return null;
     state = state.copyWith(isSubmitting: true, errorMessage: null);
@@ -219,8 +320,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
       final checkout = state;
       final settings = _ref.read(settingsProvider).settings;
       final prefix = settings?.invoicePrefix ?? 'INV-';
-
-      final orderNumber = _generateOrderNumber(prefix);
 
       final items = checkout.cartItems.map((ci) {
         return OrderItemModel(
@@ -234,11 +333,11 @@ class BillingNotifier extends StateNotifier<BillingState> {
         );
       }).toList();
 
-      await _orderRepo.create(
-        orderNumber: orderNumber,
+      final createdOrder = await _orderRepo.create(
         customerServerId: checkout.customerId,
         customerName: checkout.customerName,
         customerPhone: checkout.customerPhone,
+        loyaltyCardNumber: checkout.loyaltyCardNumber,
         items: items,
         subtotal: checkout.subtotal,
         discountAmount: checkout.totalDiscount,
@@ -248,11 +347,20 @@ class BillingNotifier extends StateNotifier<BillingState> {
         paymentMethod: checkout.paymentMethod,
       );
 
+      final orderNumber = createdOrder.orderNumber;
+
+      // Auto-refresh Dashboard and Orders data
+      _ref.read(dashboardProvider.notifier).refresh();
+      _ref.read(ordersProvider.notifier).loadOrders(forceSpinner: false);
+      if (checkout.customerPhone.isNotEmpty) {
+        _ref.read(customerProvider.notifier).loadCustomers();
+      }
+
       clearCart();
 
       try {
         final pdfFile = await PdfInvoiceHelper.generateInvoicePdf(
-          businessName: settings?.businessName ?? 'Food Truck Outlet',
+          businessName: settings?.businessName ?? 'HMB Bills',
           businessPhone: settings?.phone ?? '',
           businessAddress: settings?.address ?? '',
           gstin: settings?.gstin ?? '',
@@ -263,6 +371,9 @@ class BillingNotifier extends StateNotifier<BillingState> {
           orderDate: DateTime.now(),
           customerName: checkout.customerName,
           customerPhone: checkout.customerPhone,
+          loyaltyCardNumber: checkout.loyaltyCardNumber,
+          visitCount: checkout.currentVisitCount,
+          rewardStatus: checkout.rewardStatus,
           items: checkout.cartItems.map((i) {
             return {
               'name': i.menuItem.name,
@@ -278,11 +389,26 @@ class BillingNotifier extends StateNotifier<BillingState> {
           grandTotal: checkout.grandTotal,
           paymentMethod: checkout.paymentMethod,
         );
-        return CheckoutResult(orderNumber: orderNumber, invoiceFile: pdfFile);
+        return CheckoutResult(
+          orderNumber: orderNumber,
+          invoiceFile: pdfFile,
+          customerPhone: checkout.customerPhone,
+          customerName: checkout.customerName,
+          loyaltyCardNumber: checkout.loyaltyCardNumber,
+          visitCount: checkout.currentVisitCount,
+          rewardStatus: checkout.rewardStatus,
+          grandTotal: checkout.grandTotal,
+        );
       } catch (error) {
         return CheckoutResult(
           orderNumber: orderNumber,
           warning: 'Order saved, but the PDF invoice could not be generated.',
+          customerPhone: checkout.customerPhone,
+          customerName: checkout.customerName,
+          loyaltyCardNumber: checkout.loyaltyCardNumber,
+          visitCount: checkout.currentVisitCount,
+          rewardStatus: checkout.rewardStatus,
+          grandTotal: checkout.grandTotal,
         );
       }
     } catch (e) {

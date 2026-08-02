@@ -58,6 +58,15 @@ class ExpenseRepository {
     return ExpenseModel.fromJson(item);
   }
 
+  Future<ExpenseModel> update(String id, Map<String, dynamic> data) async {
+    final response = await _apiClient.dio.put(
+      '${ApiEndpoints.expenses}/$id',
+      data: data,
+    );
+    final item = ApiResponseParser.extractMap(response.data, ['expense']);
+    return ExpenseModel.fromJson(item);
+  }
+
   Future<void> delete(String id) async {
     await _apiClient.dio.delete('${ApiEndpoints.expenses}/$id');
   }

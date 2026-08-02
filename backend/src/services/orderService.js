@@ -6,9 +6,16 @@ const AppError = require('../utils/appError');
 
 class OrderService {
   async generateOrderNumber() {
-    const settings = await BusinessSettings.findOne();
-    const prefix = settings?.invoicePrefix || 'INV-';
-    return `${prefix}${Date.now().toString(36).toUpperCase()}`;
+    let settings = await BusinessSettings.findOne();
+    if (!settings) {
+      settings = await BusinessSettings.create({ businessName: 'Honeymoon Biryani' });
+    }
+    settings.lastBillSequenceNumber = (settings.lastBillSequenceNumber || 0) + 1;
+    await settings.save();
+
+    const prefix = settings.invoicePrefix || 'B';
+    const seqStr = String(settings.lastBillSequenceNumber).padStart(5, '0');
+    return `${prefix}${seqStr}`;
   }
 
   async createOrder(orderData) {
@@ -44,14 +51,13 @@ class OrderService {
 
       calculatedSubtotal += itemSubtotal;
       itemDiscountTotal += itemDiscount;
-      calculatedGst += (itemNet * gstPercentage) / 100;
 
       processedItems.push({
         menuItem: dbItem._id,
         name: dbItem.name,
         price,
         quantity,
-        gstPercentage,
+        gstPercentage: 0,
         subtotal: itemNet,
         notes: item.notes || '',
       });
@@ -59,25 +65,54 @@ class OrderService {
 
     const totalDiscount = itemDiscountTotal + discountAmount;
     const subtotalAfterDiscount = Math.max(0, calculatedSubtotal - totalDiscount);
-    const subtotalAfterItemDiscount = calculatedSubtotal - itemDiscountTotal;
-    if (subtotalAfterItemDiscount > 0) {
-      calculatedGst *= subtotalAfterDiscount / subtotalAfterItemDiscount;
-    } else {
-      calculatedGst = 0;
-    }
+    calculatedGst = 0;
     const serviceChargePercentage = settings?.serviceChargePercentage || 0;
     const serviceChargeAmount =
       subtotalAfterDiscount * serviceChargePercentage / 100;
     const grandTotal = Math.round(
       subtotalAfterDiscount + calculatedGst + serviceChargeAmount
     );
-    const orderNumber = orderData.orderNumber || await this.generateOrderNumber();
+    const orderNumber = await this.generateOrderNumber();
+
+    let customerObj = null;
+    let loyaltyCardNumber = orderData.loyaltyCardNumber || '';
+    let visitCount = 1;
+    let rewardStatus = 'Standard Visit';
+
+    const targetVisits = settings?.loyaltyTargetVisits || 6;
+    const rewardType = settings?.loyaltyRewardType || 'Free Drink';
+
+    if (customerId) {
+      customerObj = await Customer.findById(customerId);
+    } else if (customerPhone) {
+      customerObj = await Customer.findOne({ phone: customerPhone.trim() });
+    }
+
+    if (customerObj) {
+      customerObj.totalVisits += 1;
+      customerObj.totalSpent += grandTotal;
+      customerObj.loyaltyPoints += Math.floor(grandTotal / 100) * 10;
+      visitCount = customerObj.totalVisits;
+      loyaltyCardNumber = customerObj.loyaltyCardNumber || loyaltyCardNumber;
+
+      if (visitCount % targetVisits === 0) {
+        rewardStatus = `🎉 Loyalty Reward Available: ${rewardType}`;
+      } else {
+        const remaining = targetVisits - (visitCount % targetVisits);
+        rewardStatus = `Visit ${visitCount} (${remaining} more for ${rewardType})`;
+      }
+      await customerObj.save();
+    }
 
     const order = await Order.create({
       orderNumber,
-      customer: customerId || null,
-      customerName: customerName || 'Walk-in Customer',
-      customerPhone: customerPhone || '',
+      customer: customerObj?._id || customerId || null,
+      customerName: customerName || customerObj?.name || 'Walk-in Customer',
+      customerPhone: customerPhone || customerObj?.phone || '',
+      loyaltyCardNumber,
+      visitCount,
+      rewardStatus,
+      orderStatus: 'completed',
       items: processedItems,
       subtotal: calculatedSubtotal,
       discountAmount: totalDiscount,
@@ -88,24 +123,15 @@ class OrderService {
       paymentStatus: 'paid',
     });
 
-    if (customerId) {
-      const customer = await Customer.findById(customerId);
-      if (customer) {
-        customer.totalVisits += 1;
-        customer.totalSpent += grandTotal;
-        customer.loyaltyPoints += Math.floor(grandTotal / 100) * 10;
-        await customer.save();
-      }
-    }
-
     return order;
   }
 
   async getOrders(query = {}) {
-    const { startDate, endDate, paymentMethod, page = 1, limit = 50 } = query;
+    const { startDate, endDate, paymentMethod, status, page = 1, limit = 100 } = query;
     const filter = {};
 
     if (paymentMethod) filter.paymentMethod = paymentMethod;
+    if (status) filter.orderStatus = status;
     if (startDate || endDate) {
       filter.createdAt = {};
       if (startDate) filter.createdAt.$gte = new Date(startDate);
@@ -125,6 +151,41 @@ class OrderService {
     const order = await Order.findById(orderId);
     if (!order) throw new AppError('Order not found', 404);
     return order;
+  }
+
+  async updateOrder(orderId, updateData) {
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      { ...updateData, orderStatus: 'edited' },
+      { new: true, runValidators: true }
+    );
+    if (!order) throw new AppError('Order not found', 404);
+    return order;
+  }
+
+  async refundOrder(orderId) {
+    const order = await Order.findById(orderId);
+    if (!order) throw new AppError('Order not found', 404);
+
+    order.orderStatus = 'refunded';
+    order.paymentStatus = 'pending';
+    await order.save();
+
+    if (order.customer) {
+      const customer = await Customer.findById(order.customer);
+      if (customer) {
+        customer.totalSpent = Math.max(0, customer.totalSpent - order.grandTotal);
+        await customer.save();
+      }
+    }
+
+    return order;
+  }
+
+  async deleteOrder(orderId) {
+    const order = await Order.findByIdAndDelete(orderId);
+    if (!order) throw new AppError('Order not found', 404);
+    return { message: 'Order deleted successfully' };
   }
 }
 

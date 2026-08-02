@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/widgets/metric_card_widget.dart';
@@ -13,14 +14,14 @@ import '../../providers/settings_provider.dart';
 class HomeDashboardScreen extends ConsumerWidget {
   final Function(int tabIndex) onNavigateToTab;
   final VoidCallback onOpenSettings;
-  final VoidCallback onOpenMenu;
+  final VoidCallback onOpenOrders;
   final VoidCallback onOpenExpenses;
 
   const HomeDashboardScreen({
     super.key,
     required this.onNavigateToTab,
     required this.onOpenSettings,
-    required this.onOpenMenu,
+    required this.onOpenOrders,
     required this.onOpenExpenses,
   });
 
@@ -73,13 +74,13 @@ class HomeDashboardScreen extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.restaurant_menu_rounded),
-            tooltip: 'Menu Management',
-            onPressed: onOpenMenu,
+            icon: const Icon(Icons.receipt_long_rounded),
+            tooltip: 'Previous Orders',
+            onPressed: onOpenOrders,
           ),
           IconButton(
-            icon: const Icon(Icons.receipt_long_rounded),
-            tooltip: 'Expense Tracker',
+            icon: const Icon(Icons.currency_rupee_rounded),
+            tooltip: 'Add Expense',
             onPressed: onOpenExpenses,
           ),
           IconButton(
@@ -100,9 +101,9 @@ class HomeDashboardScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Section Header
+              // Today's Financial Summary Header
               Text(
-                'Today\'s Overview',
+                'Today\'s Financial Summary',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -110,85 +111,72 @@ class HomeDashboardScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
 
-              // 4 Compact Dashboard Summary Cards in a 2x2 Grid
+              // 4 Core Financial KPI Cards Grid
               GridView.count(
                 crossAxisCount: 2,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 1.28,
+                childAspectRatio: 1.25,
                 children: [
                   MetricCardWidget(
-                    title: 'Orders Today',
-                    value: metrics.todayOrderCount.toString(),
-                    icon: Icons.shopping_bag_outlined,
-                    color: AppColors.primary,
-                    subtitle: 'Sales completed',
-                  ),
-                  MetricCardWidget(
-                    title: 'Revenue Today',
+                    title: 'Today\'s Revenue',
                     value: CurrencyFormatter.format(metrics.todayRevenue),
                     icon: Icons.account_balance_wallet_outlined,
                     color: AppColors.secondary,
-                    subtitle: 'Gross sales',
+                    subtitle: '${metrics.todayOrderCount} orders billed',
                   ),
                   MetricCardWidget(
-                    title: 'Profit Today',
+                    title: 'Today\'s Expenses',
+                    value: CurrencyFormatter.format(metrics.todayExpenseTotal),
+                    icon: Icons.shopping_bag_outlined,
+                    color: Colors.red.shade400,
+                    subtitle: 'Operational costs',
+                  ),
+                  MetricCardWidget(
+                    title: 'Today\'s Net Profit',
                     value: CurrencyFormatter.format(metrics.netProfitToday),
                     icon: Icons.trending_up_rounded,
-                    color: Colors.blue,
-                    subtitle: 'Net earnings',
+                    color: metrics.netProfitToday >= 0 ? AppColors.secondary : Colors.red,
+                    subtitle: 'Revenue - Expenses',
                   ),
                   MetricCardWidget(
                     title: 'Active Customers',
                     value: customerCount > 0 ? customerCount.toString() : '0',
                     icon: Icons.people_outline_rounded,
                     color: Colors.purple,
-                    subtitle: 'Registered guests',
+                    subtitle: 'Loyalty members',
                   ),
                 ],
-              ).animate().fade(duration: 400.ms),
+              ).animate().fade(duration: 350.ms),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
 
-              // Quick Action Chips Row
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildQuickActionChip(
-                      context: context,
-                      label: 'New Bill',
-                      icon: Icons.add_shopping_cart_rounded,
-                      color: AppColors.primary,
-                      onTap: () => onNavigateToTab(1), // Billing
+              // Multi-timeframe Profit Overview
+              Text(
+                'Profit & Loss Breakdown',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(width: 8),
-                    _buildQuickActionChip(
-                      context: context,
-                      label: 'Manage Menu',
-                      icon: Icons.restaurant_menu_rounded,
-                      color: Colors.amber.shade800,
-                      onTap: onOpenMenu,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildQuickActionChip(
-                      context: context,
-                      label: 'Expenses',
-                      icon: Icons.receipt_long_rounded,
-                      color: Colors.red.shade600,
-                      onTap: onOpenExpenses,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildQuickActionChip(
-                      context: context,
-                      label: 'Analytics',
-                      icon: Icons.analytics_rounded,
-                      color: Colors.purple,
-                      onTap: () => onNavigateToTab(4), // Insights
-                    ),
-                  ],
+              ),
+              const SizedBox(height: 10),
+
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      _buildProfitSummaryRow('Today\'s Net Profit', metrics.netProfitToday, isDark),
+                      const Divider(height: 20),
+                      _buildProfitSummaryRow('Weekly Net Profit', metrics.weeklyProfit, isDark),
+                      const Divider(height: 20),
+                      _buildProfitSummaryRow('Monthly Net Profit', metrics.monthlyProfit, isDark),
+                      const Divider(height: 20),
+                      _buildProfitSummaryRow('Overall Net Profit', metrics.overallProfit, isDark),
+                    ],
+                  ),
                 ),
               ),
 
@@ -206,9 +194,9 @@ class HomeDashboardScreen extends ConsumerWidget {
                         ),
                   ),
                   TextButton.icon(
-                    onPressed: () => onNavigateToTab(4), // Insights
+                    onPressed: () => onNavigateToTab(4), // Reports (Tab 4)
                     icon: const Icon(Icons.chevron_right_rounded, size: 18),
-                    label: const Text('Full Report'),
+                    label: const Text('Full Reports'),
                   ),
                 ],
               ),
@@ -273,76 +261,6 @@ class HomeDashboardScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-
-              const SizedBox(height: 24),
-
-              // Top Selling Items Section
-              Text(
-                'Top Dishes Today',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 8),
-
-              if (metrics.isLoading)
-                const Column(
-                  children: [
-                    SkeletonLoader(height: 50, width: double.infinity),
-                    SizedBox(height: 8),
-                    SkeletonLoader(height: 50, width: double.infinity),
-                  ],
-                )
-              else if (metrics.topSellingItems.isEmpty)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Center(
-                      child: Text(
-                        'No dishes billed today yet.',
-                        style: TextStyle(
-                          color: isDark
-                              ? AppColors.darkTextSecondary
-                              : AppColors.lightTextSecondary,
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-              else
-                Column(
-                  children: metrics.topSellingItems.map((item) {
-                    final name = item['name'] ?? 'Item';
-                    final qty = item['quantity'] ?? 0;
-                    final total = (item['total'] as num?)?.toDouble() ?? 0.0;
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.primary.withAlpha(25),
-                          child: const Icon(
-                            Icons.restaurant_rounded,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                        ),
-                        title: Text(
-                          name,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text('$qty units sold'),
-                        trailing: Text(
-                          CurrencyFormatter.format(total),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
             ],
           ),
         ),
@@ -350,33 +268,34 @@ class HomeDashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildQuickActionChip({
-    required BuildContext context,
-    required String label,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return ActionChip(
-      onPressed: onTap,
-      avatar: Icon(icon, color: color, size: 18),
-      label: Text(
-        label,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: color,
-          fontSize: 13,
+  Widget _buildProfitSummaryRow(String label, double amount, bool isDark) {
+    final isProfit = amount >= 0;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
-      ),
-      backgroundColor: color.withAlpha(20),
-      side: BorderSide(color: color.withAlpha(60)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        Text(
+          CurrencyFormatter.format(amount),
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 16,
+            color: isProfit ? AppColors.secondary : Colors.red,
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildSimpleBarChart(List<double> data, bool isDark) {
     final maxVal = data.fold<double>(1.0, (m, e) => e > m ? e : m);
-    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final today = DateTime.now();
+    final days = List.generate(data.length, (i) {
+      final d = today.subtract(Duration(days: data.length - 1 - i));
+      return DateFormat('EEE').format(d);
+    });
 
     return SizedBox(
       height: 100,
@@ -386,7 +305,8 @@ class HomeDashboardScreen extends ConsumerWidget {
         children: List.generate(data.length, (index) {
           final val = data[index];
           final heightPct = (val / maxVal).clamp(0.08, 1.0);
-          final dayLabel = index < days.length ? days[index] : '';
+          final dayLabel = days[index];
+          final isToday = index == data.length - 1;
 
           return Column(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -395,9 +315,11 @@ class HomeDashboardScreen extends ConsumerWidget {
                 width: 24,
                 height: 70 * heightPct,
                 decoration: BoxDecoration(
-                  color: val > 0
+                  color: isToday
                       ? AppColors.primary
-                      : (isDark ? Colors.white10 : Colors.black12),
+                      : (val > 0
+                          ? AppColors.secondary
+                          : (isDark ? Colors.white10 : Colors.black12)),
                   borderRadius: BorderRadius.circular(6),
                 ),
               ),
@@ -406,9 +328,12 @@ class HomeDashboardScreen extends ConsumerWidget {
                 dayLabel,
                 style: TextStyle(
                   fontSize: 10,
-                  color: isDark
-                      ? AppColors.darkTextSecondary
-                      : AppColors.lightTextSecondary,
+                  fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                  color: isToday
+                      ? AppColors.primary
+                      : (isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.lightTextSecondary),
                 ),
               ),
             ],

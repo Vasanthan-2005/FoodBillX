@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
+import '../../core/widgets/onboarding_dialog.dart';
 import '../../providers/customer_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/menu_provider.dart';
@@ -21,12 +22,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _addressController;
-  late TextEditingController _gstinController;
   late TextEditingController _currencyController;
   late TextEditingController _prefixController;
-  late TextEditingController _taxController;
   late TextEditingController _serviceChargeController;
   late TextEditingController _footerController;
+  late TextEditingController _loyaltyVisitsController;
+  late TextEditingController _rewardTextController;
   bool _didPopulateSettings = false;
 
   @override
@@ -36,22 +37,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _nameController = TextEditingController(text: settings?.businessName ?? '');
     _phoneController = TextEditingController(text: settings?.phone ?? '');
     _addressController = TextEditingController(text: settings?.address ?? '');
-    _gstinController = TextEditingController(text: settings?.gstin ?? '');
-    _currencyController = TextEditingController(
-      text: settings?.currency ?? '₹',
-    );
-    _prefixController = TextEditingController(
-      text: settings?.invoicePrefix ?? 'INV-',
-    );
-    _taxController = TextEditingController(
-      text: settings?.taxPercentage.toString() ?? '5.0',
-    );
-    _serviceChargeController = TextEditingController(
-      text: settings?.serviceChargePercentage.toString() ?? '0.0',
-    );
-    _footerController = TextEditingController(
-      text: settings?.invoiceFooter ?? 'Thank you for dining with us!',
-    );
+    _currencyController = TextEditingController(text: settings?.currency ?? '₹');
+    _prefixController = TextEditingController(text: settings?.invoicePrefix ?? 'B');
+    _serviceChargeController = TextEditingController(text: settings?.serviceChargePercentage.toString() ?? '0.0');
+    _footerController = TextEditingController(text: settings?.invoiceFooter ?? 'Thank you for dining with us!');
+    _loyaltyVisitsController = TextEditingController(text: settings?.loyaltyTargetVisits.toString() ?? '6');
+    _rewardTextController = TextEditingController(text: settings?.loyaltyRewardDescription ?? 'Free Drink');
     _didPopulateSettings = settings != null;
   }
 
@@ -62,12 +53,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _nameController.text = settings.businessName;
     _phoneController.text = settings.phone;
     _addressController.text = settings.address;
-    _gstinController.text = settings.gstin;
     _currencyController.text = settings.currency;
     _prefixController.text = settings.invoicePrefix;
-    _taxController.text = settings.taxPercentage.toString();
     _serviceChargeController.text = settings.serviceChargePercentage.toString();
     _footerController.text = settings.invoiceFooter;
+    _loyaltyVisitsController.text = settings.loyaltyTargetVisits.toString();
+    _rewardTextController.text = settings.loyaltyRewardDescription;
   }
 
   @override
@@ -75,39 +66,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
-    _gstinController.dispose();
     _currencyController.dispose();
     _prefixController.dispose();
-    _taxController.dispose();
     _serviceChargeController.dispose();
     _footerController.dispose();
+    _loyaltyVisitsController.dispose();
+    _rewardTextController.dispose();
     super.dispose();
   }
 
   Future<void> _saveSettings() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final rewardVal = _rewardTextController.text.trim();
     final updateData = {
       'businessName': _nameController.text.trim(),
       'phone': _phoneController.text.trim(),
       'address': _addressController.text.trim(),
-      'gstin': _gstinController.text.trim(),
       'currency': _currencyController.text.trim(),
       'invoicePrefix': _prefixController.text.trim(),
-      'taxPercentage': double.tryParse(_taxController.text) ?? 5.0,
-      'serviceChargePercentage':
-          double.tryParse(_serviceChargeController.text) ?? 0.0,
+      'taxPercentage': 0.0,
+      'serviceChargePercentage': double.tryParse(_serviceChargeController.text) ?? 0.0,
       'invoiceFooter': _footerController.text.trim(),
+      'loyaltyTargetVisits': int.tryParse(_loyaltyVisitsController.text.trim()) ?? 6,
+      'loyaltyRewardType': rewardVal,
+      'loyaltyRewardDescription': rewardVal,
     };
 
-    final ok = await ref
-        .read(settingsProvider.notifier)
-        .updateSettings(updateData);
+    final ok = await ref.read(settingsProvider.notifier).updateSettings(updateData);
     if (ok && mounted) {
-      SnackbarUtils.showSuccess(
-        context,
-        'Business settings saved successfully',
-      );
+      SnackbarUtils.showSuccess(context, 'Business and Loyalty settings saved!');
     } else if (mounted) {
       SnackbarUtils.showError(context, 'Failed to save settings');
     }
@@ -131,9 +119,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 obscureText: true,
                 keyboardType: TextInputType.number,
                 maxLength: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Current 4-Digit PIN',
-                ),
+                decoration: const InputDecoration(labelText: 'Current 4-Digit PIN'),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -154,10 +140,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
                 final oldPin = oldPinController.text.trim();
@@ -165,8 +148,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 final confirmPin = confirmPinController.text.trim();
 
                 final pinPattern = RegExp(r'^\d{4}$');
-                if (!pinPattern.hasMatch(oldPin) ||
-                    !pinPattern.hasMatch(newPin)) {
+                if (!pinPattern.hasMatch(oldPin) || !pinPattern.hasMatch(newPin)) {
                   SnackbarUtils.showError(context, 'PIN must be 4 digits');
                   return;
                 }
@@ -176,14 +158,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 }
 
                 Navigator.pop(ctx);
-                final ok = await ref
-                    .read(pinAuthProvider.notifier)
-                    .changePin(oldPin, newPin);
+                final ok = await ref.read(pinAuthProvider.notifier).changePin(oldPin, newPin);
                 if (ok && mounted) {
-                  SnackbarUtils.showSuccess(
-                    context,
-                    'PIN updated successfully',
-                  );
+                  SnackbarUtils.showSuccess(context, 'PIN updated successfully');
                 } else if (mounted) {
                   SnackbarUtils.showError(context, 'Incorrect current PIN');
                 }
@@ -193,11 +170,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         );
       },
-    ).whenComplete(() {
-      oldPinController.dispose();
-      newPinController.dispose();
-      confirmPinController.dispose();
-    });
+    );
   }
 
   void _showServerConfigDialog() {
@@ -206,83 +179,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Backend Server Connection',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text('Backend Server Connection', style: TextStyle(fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Enter the backend server URL or IP address of your host machine running FoodBillX backend:',
-              style: TextStyle(fontSize: 13),
-            ),
+            const Text('Enter backend server URL or IP:', style: TextStyle(fontSize: 13)),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               decoration: const InputDecoration(
                 labelText: 'Server Base URL / IP',
-                hintText: 'http://192.168.0.176:5000/api/v1',
                 prefixIcon: Icon(Icons.dns_rounded),
               ),
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Quick Presets:',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                ActionChip(
-                  label: const Text('Wi-Fi LAN IP (192.168.0.176)'),
-                  onPressed: () {
-                    controller.text = ApiEndpoints.defaultLanIp;
-                  },
-                ),
-                ActionChip(
-                  label: const Text('Emulator (10.0.2.2)'),
-                  onPressed: () {
-                    controller.text = ApiEndpoints.emulatorIp;
-                  },
-                ),
-                ActionChip(
-                  label: const Text('Localhost (127.0.0.1)'),
-                  onPressed: () {
-                    controller.text = ApiEndpoints.localhostIp;
-                  },
-                ),
-              ],
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               final newUrl = controller.text.trim();
               Navigator.pop(ctx);
               await ApiEndpoints.saveCustomServerUrl(newUrl);
               if (mounted) {
-                SnackbarUtils.showSuccess(
-                  context,
-                  'Server URL updated to $newUrl',
-                );
-                ref
-                    .read(menuProvider.notifier)
-                    .loadCategoriesAndItems(forceSpinner: true);
-                ref
-                    .read(customerProvider.notifier)
-                    .loadCustomers(forceSpinner: true);
-                ref
-                    .read(dashboardProvider.notifier)
-                    .refresh(forceSpinner: true);
+                SnackbarUtils.showSuccess(context, 'Server URL updated');
+                ref.read(menuProvider.notifier).loadCategoriesAndItems(forceSpinner: true);
+                ref.read(customerProvider.notifier).loadCustomers(forceSpinner: true);
+                ref.read(dashboardProvider.notifier).refresh(forceSpinner: true);
                 ref.read(settingsProvider.notifier).loadSettings();
               }
             },
@@ -312,12 +236,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Security Section
+                    // Security & Server
                     Text(
-                      'Security & App Lock',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      'Security & Connection',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
 
@@ -327,82 +249,114 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ListTile(
                             leading: const CircleAvatar(
                               backgroundColor: AppColors.primary,
-                              child: Icon(
-                                Icons.lock,
-                                color: Colors.white,
-                                size: 20,
-                              ),
+                              child: Icon(Icons.lock, color: Colors.white, size: 20),
                             ),
-                            title: const Text(
-                              'Change Security PIN',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: const Text(
-                              'Update your local 4-digit POS PIN',
-                            ),
+                            title: const Text('Change Security PIN', style: TextStyle(fontWeight: FontWeight.bold)),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: _showChangePinDialog,
-                          ),
-                          const Divider(height: 1),
-                          SwitchListTile(
-                            secondary: const Icon(Icons.fingerprint),
-                            title: const Text('Biometric / Face Unlock'),
-                            subtitle: const Text(
-                              'Use Fingerprint or Face ID (Coming in V2)',
-                            ),
-                            value: false,
-                            onChanged: null,
-                          ),
-                          const Divider(height: 1),
-                          ListTile(
-                            leading: const Icon(
-                              Icons.screen_lock_portrait,
-                              color: Colors.orange,
-                            ),
-                            title: const Text(
-                              'Lock App Now',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: const Text(
-                              'Require PIN to resume application',
-                            ),
-                            onTap: () {
-                              ref.read(pinAuthProvider.notifier).lockApp();
-                            },
                           ),
                           const Divider(height: 1),
                           ListTile(
                             leading: const CircleAvatar(
                               backgroundColor: Colors.blue,
-                              child: Icon(
-                                Icons.dns_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
+                              child: Icon(Icons.dns_rounded, color: Colors.white, size: 20),
                             ),
-                            title: const Text(
-                              'Server Connection & Host IP',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: Text(
-                              'Target: ${ApiEndpoints.baseUrl}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            title: const Text('Server Connection & Host IP', style: TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text('Target: ${ApiEndpoints.baseUrl}', maxLines: 1, overflow: TextOverflow.ellipsis),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: _showServerConfigDialog,
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: const CircleAvatar(
+                              backgroundColor: Colors.amber,
+                              child: Icon(Icons.explore_rounded, color: Colors.white, size: 20),
+                            ),
+                            title: const Text('Replay App Onboarding Tour', style: TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: const Text('Interactive feature walkthrough for staff'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => OnboardingDialog.forceShow(context),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 24),
 
-                    // Store Details Section
+                    // Customer Loyalty Rewards Settings
+                    Text(
+                      'Loyalty Rewards Program',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextFormField(
+                              controller: _loyaltyVisitsController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Reward Visit Milestone',
+                                hintText: '6',
+                                prefixIcon: Icon(Icons.stars_rounded),
+                                helperText: 'Default: Every 6th purchase qualifies for a reward',
+                              ),
+                              validator: (v) {
+                                final n = int.tryParse(v ?? '');
+                                return n == null || n < 1 ? 'Enter valid visits count (min 1)' : null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _rewardTextController,
+                              decoration: const InputDecoration(
+                                labelText: 'Reward Benefit / Custom Description *',
+                                hintText: 'e.g. Free Biryani, Free Egg, 10% Off, ₹50 Discount',
+                                prefixIcon: Icon(Icons.card_giftcard_rounded),
+                                helperText: 'Type any custom reward benefit or pick a preset below',
+                              ),
+                              validator: (v) => v == null || v.trim().isEmpty ? 'Enter reward description' : null,
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Quick Presets:',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                '🥤 Free Drink',
+                                '🥚 Free Egg',
+                                '🍗 Free Chicken',
+                                '🏷️ 10% Discount',
+                                '💰 ₹50 Off',
+                                '🍛 Free Biryani',
+                              ].map((preset) {
+                                return ActionChip(
+                                  label: Text(preset, style: const TextStyle(fontSize: 12)),
+                                  onPressed: () {
+                                    setState(() {
+                                      _rewardTextController.text = preset.replaceAll(RegExp(r'^[^\s]+\s*'), '');
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Store Details
                     Text(
                       'Store Details',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
 
@@ -413,40 +367,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           children: [
                             TextFormField(
                               controller: _nameController,
-                              decoration: const InputDecoration(
-                                labelText: 'Business / Shop Name',
-                                prefixIcon: Icon(Icons.store),
-                              ),
-                              validator: (val) =>
-                                  val == null || val.trim().isEmpty
-                                  ? 'Required'
-                                  : null,
+                              decoration: const InputDecoration(labelText: 'Business Name', prefixIcon: Icon(Icons.store)),
+                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                             ),
                             const SizedBox(height: 12),
                             TextFormField(
                               controller: _phoneController,
                               keyboardType: TextInputType.phone,
-                              decoration: const InputDecoration(
-                                labelText: 'Phone Number',
-                                prefixIcon: Icon(Icons.phone),
-                              ),
+                              decoration: const InputDecoration(labelText: 'Phone Number', prefixIcon: Icon(Icons.phone)),
                             ),
                             const SizedBox(height: 12),
                             TextFormField(
                               controller: _addressController,
                               maxLines: 2,
-                              decoration: const InputDecoration(
-                                labelText: 'Address',
-                                prefixIcon: Icon(Icons.location_on),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextFormField(
-                              controller: _gstinController,
-                              decoration: const InputDecoration(
-                                labelText: 'GSTIN Number (Optional)',
-                                prefixIcon: Icon(Icons.receipt),
-                              ),
+                              decoration: const InputDecoration(labelText: 'Address', prefixIcon: Icon(Icons.location_on)),
                             ),
                           ],
                         ),
@@ -454,12 +388,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Billing & Invoice Settings
+                    // Invoice & Billing Settings
                     Text(
-                      'Invoice & Tax Settings',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      'Invoice & Billing Settings',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
 
@@ -473,68 +405,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 Expanded(
                                   child: TextFormField(
                                     controller: _prefixController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Invoice Prefix',
-                                      hintText: 'INV-',
-                                    ),
+                                    decoration: const InputDecoration(labelText: 'Invoice Prefix', hintText: 'B'),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: TextFormField(
                                     controller: _currencyController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Currency Symbol',
-                                      hintText: '₹',
-                                    ),
+                                    decoration: const InputDecoration(labelText: 'Currency Symbol', hintText: '₹'),
                                   ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 12),
                             TextFormField(
-                              controller: _taxController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              decoration: const InputDecoration(
-                                labelText: 'Default Tax Rate (%)',
-                                prefixIcon: Icon(Icons.percent),
-                              ),
-                              validator: (value) {
-                                final rate = double.tryParse(value ?? '');
-                                return rate == null || rate < 0 || rate > 100
-                                    ? 'Enter a percentage from 0 to 100'
-                                    : null;
-                              },
-                            ),
-                            const SizedBox(height: 12),
-                            TextFormField(
                               controller: _serviceChargeController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              decoration: const InputDecoration(
-                                labelText: 'Service Charge (%)',
-                                prefixIcon: Icon(Icons.room_service_outlined),
-                              ),
-                              validator: (value) {
-                                final rate = double.tryParse(value ?? '');
-                                return rate == null || rate < 0 || rate > 100
-                                    ? 'Enter a percentage from 0 to 100'
-                                    : null;
-                              },
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(labelText: 'Service Charge (%)', prefixIcon: Icon(Icons.room_service_outlined)),
                             ),
                             const SizedBox(height: 12),
                             TextFormField(
                               controller: _footerController,
                               maxLines: 2,
-                              decoration: const InputDecoration(
-                                labelText: 'Invoice Footer',
-                                prefixIcon: Icon(Icons.notes_rounded),
-                              ),
+                              decoration: const InputDecoration(labelText: 'Invoice Footer', prefixIcon: Icon(Icons.notes_rounded)),
                             ),
                           ],
                         ),
@@ -549,12 +442,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       onPressed: _saveSettings,
                       child: const Text(
-                        'Save Business Settings',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                        'Save All Settings',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
                     ),
                     const SizedBox(height: 40),

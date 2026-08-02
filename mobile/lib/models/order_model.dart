@@ -49,6 +49,10 @@ class OrderModel {
   final String? customerId;
   final String customerName;
   final String customerPhone;
+  final String loyaltyCardNumber;
+  final int visitCount;
+  final String rewardStatus;
+  final String orderStatus;
   final List<OrderItemModel> items;
   final double subtotal;
   final double discountAmount;
@@ -65,6 +69,10 @@ class OrderModel {
     this.customerId,
     this.customerName = 'Walk-in Customer',
     this.customerPhone = '',
+    this.loyaltyCardNumber = '',
+    this.visitCount = 1,
+    this.rewardStatus = '',
+    this.orderStatus = 'completed',
     required this.items,
     required this.subtotal,
     this.discountAmount = 0.0,
@@ -84,6 +92,10 @@ class OrderModel {
       customerId: json['customerId']?.toString() ?? json['customer']?.toString(),
       customerName: json['customerName'] ?? 'Walk-in Customer',
       customerPhone: json['customerPhone'] ?? '',
+      loyaltyCardNumber: json['loyaltyCardNumber'] ?? '',
+      visitCount: (json['visitCount'] as num?)?.toInt() ?? 1,
+      rewardStatus: json['rewardStatus'] ?? '',
+      orderStatus: json['orderStatus'] ?? 'completed',
       items: rawItems
           .map((i) => OrderItemModel.fromJson(Map<String, dynamic>.from(i)))
           .toList(),
@@ -108,6 +120,10 @@ class OrderModel {
       'customerId': customerId,
       'customerName': customerName,
       'customerPhone': customerPhone,
+      'loyaltyCardNumber': loyaltyCardNumber,
+      'visitCount': visitCount,
+      'rewardStatus': rewardStatus,
+      'orderStatus': orderStatus,
       'items': items.map((i) => i.toJson()).toList(),
       'subtotal': subtotal,
       'discountAmount': discountAmount,

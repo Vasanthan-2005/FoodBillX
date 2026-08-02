@@ -10,6 +10,9 @@ class BusinessSettingsModel {
   final double taxPercentage;
   final double serviceChargePercentage;
   final String invoiceFooter;
+  final int loyaltyTargetVisits;
+  final String loyaltyRewardType;
+  final String loyaltyRewardDescription;
 
   BusinessSettingsModel({
     required this.id,
@@ -23,12 +26,15 @@ class BusinessSettingsModel {
     required this.taxPercentage,
     required this.serviceChargePercentage,
     required this.invoiceFooter,
+    this.loyaltyTargetVisits = 6,
+    this.loyaltyRewardType = 'Free Drink',
+    this.loyaltyRewardDescription = 'Free Drink',
   });
 
   factory BusinessSettingsModel.fromJson(Map<String, dynamic> json) {
     return BusinessSettingsModel(
       id: json['_id'] ?? json['id'] ?? '',
-      businessName: json['businessName'] ?? 'Food Truck Outlet',
+      businessName: json['businessName'] ?? 'HMB Bills',
       logo: json['logo'] ?? '',
       phone: json['phone'] ?? '',
       address: json['address'] ?? '',
@@ -39,6 +45,9 @@ class BusinessSettingsModel {
       serviceChargePercentage:
           (json['serviceChargePercentage'] as num?)?.toDouble() ?? 0.0,
       invoiceFooter: json['invoiceFooter'] ?? 'Thank you for dining with us!',
+      loyaltyTargetVisits: (json['loyaltyTargetVisits'] as num?)?.toInt() ?? 6,
+      loyaltyRewardType: json['loyaltyRewardType'] ?? 'Free Drink',
+      loyaltyRewardDescription: json['loyaltyRewardDescription'] ?? 'Free Drink',
     );
   }
 
@@ -54,6 +63,9 @@ class BusinessSettingsModel {
       'taxPercentage': taxPercentage,
       'serviceChargePercentage': serviceChargePercentage,
       'invoiceFooter': invoiceFooter,
+      'loyaltyTargetVisits': loyaltyTargetVisits,
+      'loyaltyRewardType': loyaltyRewardType,
+      'loyaltyRewardDescription': loyaltyRewardDescription,
     };
   }
 }

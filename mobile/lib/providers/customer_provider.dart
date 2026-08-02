@@ -76,6 +76,28 @@ class CustomerNotifier extends StateNotifier<CustomerState> {
     }
   }
 
+  Future<CustomerModel?> quickCreateCustomer({
+    required String name,
+    required String phone,
+    String? loyaltyCardNumber,
+  }) async {
+    try {
+      final newCust = await _repo.create({
+        'name': name,
+        'phone': phone,
+        if (loyaltyCardNumber != null && loyaltyCardNumber.isNotEmpty)
+          'loyaltyCardNumber': loyaltyCardNumber,
+      });
+      await loadCustomers(forceSpinner: false);
+      return newCust;
+    } catch (e) {
+      state = state.copyWith(
+        errorMessage: e.toString().replaceAll('Exception: ', ''),
+      );
+      return null;
+    }
+  }
+
   Future<bool> updateCustomer(String id, Map<String, dynamic> data) async {
     try {
       await _repo.update(id, data);
@@ -110,6 +132,36 @@ class CustomerNotifier extends StateNotifier<CustomerState> {
       );
       return false;
     }
+  }
+
+  CustomerModel? findByPhone(String phone) {
+    final p = phone.trim();
+    if (p.isEmpty) return null;
+    final match = state.customers.where((c) => c.phone.trim() == p);
+    return match.isNotEmpty ? match.first : null;
+  }
+
+  CustomerModel? findByLoyaltyCard(String cardNumber) {
+    final card = cardNumber.trim().toLowerCase();
+    if (card.isEmpty) return null;
+    final match = state.customers.where(
+      (c) => c.loyaltyCardNumber.trim().toLowerCase() == card,
+    );
+    return match.isNotEmpty ? match.first : null;
+  }
+
+  Future<CustomerModel?> searchByLoyaltyCardNumber(String cardNumber) async {
+    final local = findByLoyaltyCard(cardNumber);
+    if (local != null) return local;
+
+    try {
+      final results = await _repo.getAll(cardNumber: cardNumber.trim());
+      if (results.isNotEmpty) {
+        await loadCustomers(forceSpinner: false);
+        return results.first;
+      }
+    } catch (_) {}
+    return null;
   }
 }
 

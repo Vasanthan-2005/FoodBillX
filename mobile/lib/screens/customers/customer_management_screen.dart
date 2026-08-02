@@ -42,11 +42,10 @@ class _CustomerManagementScreenState
     });
   }
 
-  // ── Add / Edit Customer Dialog ─────────────────────────────────────
   void _showCustomerFormDialog([CustomerModel? existing]) {
     final nameController = TextEditingController(text: existing?.name ?? '');
     final phoneController = TextEditingController(text: existing?.phone ?? '');
-    final emailController = TextEditingController(text: existing?.email ?? '');
+    final cardController = TextEditingController(text: existing?.loyaltyCardNumber ?? '');
 
     final isEdit = existing != null;
     final String? customerId = existing?.id;
@@ -81,11 +80,11 @@ class _CustomerManagementScreenState
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
+                controller: cardController,
                 decoration: const InputDecoration(
-                  labelText: 'Email (optional)',
-                  prefixIcon: Icon(Icons.email_outlined),
+                  labelText: 'Loyalty Card Number (Optional)',
+                  hintText: 'Auto-generated if left blank',
+                  prefixIcon: Icon(Icons.credit_card_rounded),
                 ),
               ),
             ],
@@ -100,19 +99,23 @@ class _CustomerManagementScreenState
             onPressed: () async {
               final name = nameController.text.trim();
               final phone = phoneController.text.trim();
+              final card = cardController.text.trim();
               if (name.isEmpty || phone.isEmpty) {
-                SnackbarUtils.showError(context, 'Name and phone are required');
+                SnackbarUtils.showError(ctx, 'Name and phone are required');
+                return;
+              }
+
+              final customers = ref.read(customerProvider).customers;
+              if (!isEdit && customers.any((c) => c.phone.trim() == phone)) {
+                SnackbarUtils.showError(ctx, 'Customer already exists with this mobile number.');
                 return;
               }
 
               final notifier = ref.read(customerProvider.notifier);
-              final messenger = ScaffoldMessenger.of(context);
-              Navigator.pop(ctx);
-
               final data = {
                 'name': name,
                 'phone': phone,
-                'email': emailController.text.trim(),
+                if (card.isNotEmpty) 'loyaltyCardNumber': card,
               };
 
               bool ok;
@@ -122,27 +125,22 @@ class _CustomerManagementScreenState
                 ok = await notifier.createCustomer(data);
               }
 
-              if (ok) {
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      isEdit
-                          ? '$name updated successfully'
-                          : '$name added to loyalty directory',
-                    ),
-                    backgroundColor: Colors.green.shade700,
-                  ),
-                );
-              } else {
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      ref.read(customerProvider).errorMessage ??
-                          'Operation failed',
-                    ),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+              if (ctx.mounted) {
+                if (ok) {
+                  Navigator.pop(ctx);
+                  SnackbarUtils.showSuccess(
+                    context,
+                    isEdit
+                        ? '$name updated successfully'
+                        : '$name added to loyalty directory',
+                  );
+                } else {
+                  SnackbarUtils.showError(
+                    ctx,
+                    ref.read(customerProvider).errorMessage ??
+                        'Customer already exists with this mobile number.',
+                  );
+                }
               }
             },
             child: Text(isEdit ? 'Save Changes' : 'Add Customer'),
@@ -152,7 +150,6 @@ class _CustomerManagementScreenState
     );
   }
 
-  // ── Assign Loyalty Card ────────────────────────────────────────────
   void _showAssignCardDialog(String? customerId, String currentCard) {
     if (customerId == null) return;
     final cardController = TextEditingController(text: currentCard);
@@ -169,7 +166,7 @@ class _CustomerManagementScreenState
           controller: cardController,
           decoration: const InputDecoration(
             labelText: 'Card Number',
-            hintText: 'e.g. LC-001',
+            hintText: 'e.g. HMB-102030',
             prefixIcon: Icon(Icons.credit_card_rounded),
           ),
         ),
@@ -204,7 +201,6 @@ class _CustomerManagementScreenState
     );
   }
 
-  // ── Delete Customer ────────────────────────────────────────────────
   Future<void> _confirmDeleteCustomer(String id, String name) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -248,7 +244,7 @@ class _CustomerManagementScreenState
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () =>
-                ref.read(customerProvider.notifier).loadCustomers(),
+                ref.read(customerProvider.notifier).loadCustomers(forceSpinner: true),
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -269,7 +265,6 @@ class _CustomerManagementScreenState
       ),
       body: Column(
         children: [
-          // Search Field
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
             child: TextField(
@@ -344,216 +339,213 @@ class _CustomerManagementScreenState
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
         itemCount: filtered.length,
         itemBuilder: (ctx, index) {
-        final c = filtered[index];
-        final String name = c.name;
-        final String phone = c.phone;
-        final String cardNum = c.loyaltyCardNumber;
-        final double spent = c.totalSpent;
-        final int visits = c.totalVisits;
-        final int points = c.loyaltyPoints;
-        final String customerId = c.id;
+          final c = filtered[index];
+          final String name = c.name;
+          final String phone = c.phone;
+          final String cardNum = c.loyaltyCardNumber;
+          final double spent = c.totalSpent;
+          final int visits = c.totalVisits;
+          final int points = c.loyaltyPoints;
+          final String customerId = c.id;
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: AppColors.primary.withAlpha(30),
-                      child: Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: AppColors.primary,
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 22,
+                        backgroundColor: AppColors.primary.withAlpha(30),
+                        child: Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : 'C',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              phone,
+                              style: TextStyle(
+                                color: isDark
+                                    ? AppColors.darkTextSecondary
+                                    : AppColors.lightTextSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        onSelected: (val) {
+                          if (val == 'edit') _showCustomerFormDialog(c);
+                          if (val == 'card') {
+                            _showAssignCardDialog(customerId, cardNum);
+                          }
+                          if (val == 'delete') {
+                            _confirmDeleteCustomer(customerId, name);
+                          }
+                        },
+                        itemBuilder: (ctx) => [
+                          const PopupMenuItem(
+                            value: 'edit',
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit_outlined, size: 18),
+                                SizedBox(width: 8),
+                                Text('Edit Customer'),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            phone,
-                            style: TextStyle(
-                              color: isDark
-                                  ? AppColors.darkTextSecondary
-                                  : AppColors.lightTextSecondary,
-                              fontSize: 13,
+                          PopupMenuItem(
+                            value: 'card',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.credit_card_rounded, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  cardNum.isNotEmpty
+                                      ? 'Change Card'
+                                      : 'Assign Card',
+                                ),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red,
+                                  size: 18,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Delete',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    // ⋮ More actions
-                    PopupMenuButton<String>(
-                      onSelected: (val) {
-                        if (val == 'edit') _showCustomerFormDialog(c);
-                        if (val == 'card') {
-                          _showAssignCardDialog(customerId, cardNum);
-                        }
-                        if (val == 'delete') {
-                          _confirmDeleteCustomer(customerId, name);
-                        }
-                      },
-                      itemBuilder: (ctx) => [
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              Icon(Icons.edit_outlined, size: 18),
-                              SizedBox(width: 8),
-                              Text('Edit Customer'),
-                            ],
-                          ),
+                    ],
+                  ),
+                  if (cardNum.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () => _showAssignCardDialog(customerId, cardNum),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
                         ),
-                        PopupMenuItem(
-                          value: 'card',
-                          child: Row(
-                            children: [
-                              const Icon(Icons.credit_card_rounded, size: 18),
-                              const SizedBox(width: 8),
-                              Text(
-                                cardNum.isNotEmpty
-                                    ? 'Change Card'
-                                    : 'Assign Card',
-                              ),
-                            ],
-                          ),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary.withAlpha(30),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.secondary),
                         ),
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.delete_outline,
-                                color: Colors.red,
-                                size: 18,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'Delete',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-
-                // Loyalty card badge
-                if (cardNum.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  InkWell(
-                    onTap: () => _showAssignCardDialog(customerId, cardNum),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.secondary.withAlpha(30),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.secondary),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.credit_card_rounded,
-                            size: 14,
-                            color: AppColors.secondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Card #$cardNum',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.credit_card_rounded,
+                              size: 14,
                               color: AppColors.secondary,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 4),
+                            Text(
+                              'Card #$cardNum',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.secondary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () => _showAssignCardDialog(customerId, cardNum),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withAlpha(25),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.orange),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.credit_card_outlined,
-                            size: 14,
-                            color: Colors.orange,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'Assign Loyalty Card',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                  ] else ...[
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () => _showAssignCardDialog(customerId, cardNum),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withAlpha(25),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.orange),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.credit_card_outlined,
+                              size: 14,
                               color: Colors.orange,
                             ),
-                          ),
-                        ],
+                            SizedBox(width: 4),
+                            Text(
+                              'Assign Loyalty Card',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  ],
+                  const Divider(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _StatChip(label: 'Visits', value: '$visits'),
+                      _StatChip(
+                        label: 'Points',
+                        value: '$points pts',
+                        color: AppColors.primary,
+                      ),
+                      _StatChip(
+                        label: 'Spent',
+                        value: CurrencyFormatter.format(spent),
+                        color: AppColors.secondary,
+                      ),
+                    ],
                   ),
                 ],
-
-                const Divider(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _StatChip(label: 'Visits', value: '$visits'),
-                    _StatChip(
-                      label: 'Points',
-                      value: '$points pts',
-                      color: AppColors.primary,
-                    ),
-                    _StatChip(
-                      label: 'Spent',
-                      value: CurrencyFormatter.format(spent),
-                      color: AppColors.secondary,
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
-        ).animate().fadeIn(delay: (index * 25).ms);
-      },
-    ),
-  );
+          ).animate().fadeIn(delay: (index * 20).ms);
+        },
+      ),
+    );
   }
 }
 

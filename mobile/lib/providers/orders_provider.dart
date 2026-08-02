@@ -1,9 +1,16 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/order_model.dart';
 import '../repositories/order_repository.dart';
+import 'dashboard_provider.dart';
+
+enum OrderDateFilter { today, yesterday, thisWeek, thisMonth, custom }
 
 class OrdersState {
   final List<OrderModel> orders;
+  final OrderDateFilter dateFilter;
+  final DateTimeRange? customDateRange;
+  final String selectedPaymentFilter;
   final int totalCount;
   final bool isLoading;
   final String? errorMessage;
@@ -12,6 +19,9 @@ class OrdersState {
 
   OrdersState({
     required this.orders,
+    this.dateFilter = OrderDateFilter.today,
+    this.customDateRange,
+    this.selectedPaymentFilter = 'ALL',
     this.totalCount = 0,
     this.isLoading = false,
     this.errorMessage,
@@ -23,6 +33,9 @@ class OrdersState {
 
   OrdersState copyWith({
     List<OrderModel>? orders,
+    OrderDateFilter? dateFilter,
+    DateTimeRange? customDateRange,
+    String? selectedPaymentFilter,
     int? totalCount,
     bool? isLoading,
     String? errorMessage,
@@ -31,6 +44,9 @@ class OrdersState {
   }) {
     return OrdersState(
       orders: orders ?? this.orders,
+      dateFilter: dateFilter ?? this.dateFilter,
+      customDateRange: customDateRange ?? this.customDateRange,
+      selectedPaymentFilter: selectedPaymentFilter ?? this.selectedPaymentFilter,
       totalCount: totalCount ?? this.totalCount,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
@@ -42,34 +58,66 @@ class OrdersState {
 
 class OrdersNotifier extends StateNotifier<OrdersState> {
   final OrderRepository _repo;
+  final Ref _ref;
   int _loadGeneration = 0;
-  DateTime? _startDate;
-  DateTime? _endDate;
-  String? _paymentMethod;
 
-  OrdersNotifier(this._repo) : super(OrdersState.initial()) {
+  OrdersNotifier(this._repo, this._ref) : super(OrdersState.initial()) {
     loadOrders();
   }
 
+  (DateTime?, DateTime?) _calculateDateRange(OrderDateFilter filter, DateTimeRange? customRange) {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+
+    switch (filter) {
+      case OrderDateFilter.today:
+        return (startOfDay, endOfDay);
+      case OrderDateFilter.yesterday:
+        final startYest = startOfDay.subtract(const Duration(days: 1));
+        final endYest = endOfDay.subtract(const Duration(days: 1));
+        return (startYest, endYest);
+      case OrderDateFilter.thisWeek:
+        final startWeek = startOfDay.subtract(Duration(days: startOfDay.weekday - 1));
+        return (startWeek, endOfDay);
+      case OrderDateFilter.thisMonth:
+        final startMonth = DateTime(now.year, now.month, 1);
+        return (startMonth, endOfDay);
+      case OrderDateFilter.custom:
+        if (customRange != null) {
+          return (customRange.start, customRange.end);
+        }
+        return (startOfDay, endOfDay);
+    }
+  }
+
   Future<void> loadOrders({
-    DateTime? startDate,
-    DateTime? endDate,
-    String? paymentMethod,
+    OrderDateFilter? dateFilter,
+    DateTimeRange? customRange,
+    String? paymentFilter,
     bool forceSpinner = false,
   }) async {
-    _startDate = startDate;
-    _endDate = endDate;
-    _paymentMethod = paymentMethod;
+    final newFilter = dateFilter ?? state.dateFilter;
+    final newCustomRange = customRange ?? state.customDateRange;
+    final newPaymentFilter = paymentFilter ?? state.selectedPaymentFilter;
+
+    final (start, end) = _calculateDateRange(newFilter, newCustomRange);
     final generation = ++_loadGeneration;
 
     final showLoading = forceSpinner || state.orders.isEmpty;
-    state = state.copyWith(isLoading: showLoading, errorMessage: null);
+    state = state.copyWith(
+      dateFilter: newFilter,
+      customDateRange: newCustomRange,
+      selectedPaymentFilter: newPaymentFilter,
+      isLoading: showLoading,
+      errorMessage: null,
+    );
 
     try {
       final orders = await _repo.getAll(
-        startDate: startDate,
-        endDate: endDate,
-        paymentMethod: paymentMethod,
+        startDate: start,
+        endDate: end,
+        paymentMethod: newPaymentFilter == 'ALL' ? null : newPaymentFilter.toLowerCase(),
       );
       if (generation != _loadGeneration) return;
       state = state.copyWith(
@@ -89,34 +137,22 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     }
   }
 
-  Future<void> loadMore() async {
-    if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
-    state = state.copyWith(isLoadingMore: true);
+  Future<bool> refundOrder(String orderId) async {
     try {
-      final next = await _repo.getAll(
-        startDate: _startDate,
-        endDate: _endDate,
-        paymentMethod: _paymentMethod,
-        offset: state.orders.length,
-      );
-      final combined = [...state.orders, ...next];
+      await _repo.refund(orderId);
+      await loadOrders(forceSpinner: false);
+      _ref.read(dashboardProvider.notifier).refresh();
+      return true;
+    } catch (e) {
       state = state.copyWith(
-        orders: combined,
-        isLoadingMore: false,
-        hasMore: false,
+        errorMessage: e.toString().replaceAll('Exception: ', ''),
       );
-    } catch (error) {
-      state = state.copyWith(
-        isLoadingMore: false,
-        errorMessage: error.toString(),
-      );
+      return false;
     }
   }
 }
 
-final ordersProvider = StateNotifierProvider<OrdersNotifier, OrdersState>((
-  ref,
-) {
+final ordersProvider = StateNotifierProvider<OrdersNotifier, OrdersState>((ref) {
   final repo = ref.watch(orderRepositoryProvider);
-  return OrdersNotifier(repo);
+  return OrdersNotifier(repo, ref);
 });

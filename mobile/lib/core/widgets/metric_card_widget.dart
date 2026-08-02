@@ -28,7 +28,7 @@ class MetricCardWidget extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isDark ? AppColors.darkCard : AppColors.lightCard,
           borderRadius: BorderRadius.circular(18),
@@ -50,6 +50,7 @@ class MetricCardWidget extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            // Top Row: Icon + Title
             Row(
               children: [
                 Container(
@@ -60,25 +61,34 @@ class MetricCardWidget extends StatelessWidget {
                   ),
                   child: Icon(icon, color: color, size: 18),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.lightTextSecondary,
+                    ),
+                  ),
+                ),
                 Container(
-                  width: 7,
-                  height: 7,
+                  width: 6,
+                  height: 6,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: color,
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withAlpha(150),
-                        blurRadius: 6,
-                        spreadRadius: 1,
-                      ),
-                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
+
+            // Middle: Large Value
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
@@ -86,8 +96,8 @@ class MetricCardWidget extends StatelessWidget {
                 value,
                 maxLines: 1,
                 style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
                   color: isDark
                       ? AppColors.darkTextPrimary
                       : AppColors.lightTextPrimary,
@@ -95,39 +105,24 @@ class MetricCardWidget extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: isDark
-                          ? AppColors.darkTextSecondary
-                          : AppColors.lightTextSecondary,
-                    ),
-                  ),
+
+            // Bottom: Subtitle
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                subtitle!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: color,
                 ),
-                if (subtitle != null) ...[
-                  const SizedBox(width: 4),
-                  Text(
-                    subtitle!,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: color,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+              ),
+            ],
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 300.ms);
+    ).animate().fadeIn(duration: 250.ms);
   }
 }

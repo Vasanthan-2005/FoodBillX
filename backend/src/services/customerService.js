@@ -1,13 +1,14 @@
 const Customer = require('../models/Customer');
 const AppError = require('../utils/appError');
-const recordSyncDeletion = require('../utils/recordSyncDeletion');
 
 class CustomerService {
   async getCustomers(query = {}) {
-    const { search, cardNumber } = query;
+    const { search, cardNumber, phone } = query;
     const filter = {};
 
-    if (cardNumber) {
+    if (phone) {
+      filter.phone = phone.trim();
+    } else if (cardNumber) {
       filter.loyaltyCardNumber = cardNumber.trim();
     } else if (search) {
       filter.$or = [
@@ -21,22 +22,54 @@ class CustomerService {
   }
 
   async createCustomer(customerData) {
-    const existing = await Customer.findOne({ phone: customerData.phone.trim() });
-    if (existing) {
-      throw new AppError('Customer with this phone number already exists', 400);
+    const phone = customerData.phone?.trim();
+    if (!phone) {
+      throw new AppError('Phone number is required', 400);
     }
-    return await Customer.create(customerData);
+
+    const existingPhone = await Customer.findOne({ phone });
+    if (existingPhone) {
+      throw new AppError('Customer already exists with this mobile number.', 400);
+    }
+
+    let loyaltyCardNumber = customerData.loyaltyCardNumber?.trim();
+    if (loyaltyCardNumber) {
+      const existingCard = await Customer.findOne({ loyaltyCardNumber });
+      if (existingCard) {
+        throw new AppError('Customer with this Loyalty Card Number already exists', 400);
+      }
+    } else {
+      loyaltyCardNumber = `HMB-${Math.floor(100000 + Math.random() * 900000)}`;
+    }
+
+    const cleanData = {
+      name: customerData.name?.trim(),
+      phone,
+      loyaltyCardNumber,
+      address: customerData.address?.trim() || '',
+      notes: customerData.notes?.trim() || '',
+    };
+
+    return await Customer.create(cleanData);
   }
 
   async updateCustomer(customerId, updateData) {
-    // Prevent phone collision with another customer
     if (updateData.phone) {
       const conflict = await Customer.findOne({
         phone: updateData.phone.trim(),
         _id: { $ne: customerId },
       });
-      if (conflict) throw new AppError('Another customer with this phone number already exists', 400);
+      if (conflict) throw new AppError('A customer with this mobile number already exists.', 400);
     }
+
+    if (updateData.loyaltyCardNumber) {
+      const cardConflict = await Customer.findOne({
+        loyaltyCardNumber: updateData.loyaltyCardNumber.trim(),
+        _id: { $ne: customerId },
+      });
+      if (cardConflict) throw new AppError('Another customer with this Loyalty Card Number already exists', 400);
+    }
+
     const customer = await Customer.findByIdAndUpdate(
       customerId,
       updateData,
@@ -49,7 +82,6 @@ class CustomerService {
   async deleteCustomer(customerId) {
     const customer = await Customer.findByIdAndDelete(customerId);
     if (!customer) throw new AppError('Customer not found', 404);
-    await recordSyncDeletion('customer', customer._id);
     return { message: 'Customer deleted successfully' };
   }
 

@@ -1,7 +1,6 @@
 const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
 const AppError = require('../utils/appError');
-const recordSyncDeletion = require('../utils/recordSyncDeletion');
 
 class MenuService {
   // Categories
@@ -101,7 +100,6 @@ class MenuService {
     if (!item) {
       throw new AppError('Menu item not found', 404);
     }
-    await recordSyncDeletion('menuItem', item._id);
     return item;
   }
 

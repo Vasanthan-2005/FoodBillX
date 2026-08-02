@@ -214,18 +214,6 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      // GST (auto-filled from global setting)
-                      TextFormField(
-                        controller: gstController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'GST % (optional override)',
-                          helperText:
-                              'Default: $defaultGst% from global settings. Change only if different.',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
                       // Veg / Non-Veg toggle
                       Row(
                         children: [
@@ -573,7 +561,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${CurrencyFormatter.format(item.price)}  •  GST ${item.gstPercentage}%',
+                        CurrencyFormatter.format(item.price),
                         style: const TextStyle(
                           fontSize: 13,
                           color: AppColors.primary,

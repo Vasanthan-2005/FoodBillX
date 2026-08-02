@@ -16,6 +16,9 @@ class PdfInvoiceHelper {
     required DateTime orderDate,
     required String customerName,
     required String customerPhone,
+    String loyaltyCardNumber = '',
+    int visitCount = 1,
+    String rewardStatus = '',
     required List<Map<String, dynamic>> items,
     required double subtotal,
     required double discount,
@@ -50,24 +53,22 @@ class PdfInvoiceHelper {
                         ),
                       ),
                       pw.SizedBox(height: 4),
-                      pw.Text('Phone: $businessPhone'),
-                      if (businessAddress.isNotEmpty)
-                        pw.Text('Address: $businessAddress'),
-                      if (gstin.isNotEmpty) pw.Text('GSTIN: $gstin'),
+                      if (businessPhone.isNotEmpty) pw.Text('Phone: $businessPhone'),
+                      if (businessAddress.isNotEmpty) pw.Text('Address: $businessAddress'),
                     ],
                   ),
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
                       pw.Text(
-                        'TAX INVOICE',
+                        'BILL RECEIPT',
                         style: pw.TextStyle(
                           fontSize: 18,
                           fontWeight: pw.FontWeight.bold,
                         ),
                       ),
                       pw.SizedBox(height: 4),
-                      pw.Text('Invoice #: $orderNumber'),
+                      pw.Text('Bill #: $orderNumber'),
                       pw.Text(
                         'Date: ${orderDate.day}/${orderDate.month}/${orderDate.year} ${orderDate.hour}:${orderDate.minute}',
                       ),
@@ -77,15 +78,39 @@ class PdfInvoiceHelper {
               ),
               pw.Divider(thickness: 1, height: 24),
 
-              // Customer Details
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Customer: $customerName'),
-                  if (customerPhone.isNotEmpty)
-                    pw.Text('Phone: $customerPhone'),
-                  pw.Text('Payment: ${paymentMethod.toUpperCase()}'),
-                ],
+              // Customer & Loyalty Box
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                  border: pw.Border.all(color: PdfColors.grey300),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Customer: $customerName', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                        if (customerPhone.isNotEmpty) pw.Text('Phone: $customerPhone'),
+                        pw.Text('Payment: ${paymentMethod.toUpperCase()}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                    if (loyaltyCardNumber.isNotEmpty || rewardStatus.isNotEmpty) ...[
+                      pw.SizedBox(height: 4),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          if (loyaltyCardNumber.isNotEmpty) pw.Text('Loyalty Card #: $loyaltyCardNumber'),
+                          pw.Text('Visit Count: #$visitCount'),
+                          if (rewardStatus.isNotEmpty)
+                            pw.Text('Loyalty Status: $rewardStatus', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
               ),
               pw.SizedBox(height: 16),
 
@@ -99,8 +124,8 @@ class PdfInvoiceHelper {
                     '$idx',
                     item['name'],
                     '${item['quantity']}',
-                    '₹${item['price']}',
-                    '₹${item['subtotal']}',
+                    'Rs. ${item['price']}',
+                    'Rs. ${item['subtotal']}',
                   ];
                 }).toList(),
                 headerStyle: pw.TextStyle(
@@ -133,37 +158,27 @@ class PdfInvoiceHelper {
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
                             pw.Text('Subtotal:'),
-                            pw.Text('₹${subtotal.toStringAsFixed(2)}'),
+                            pw.Text('Rs. ${subtotal.toStringAsFixed(2)}'),
                           ],
                         ),
                         if (discount > 0) ...[
                           pw.SizedBox(height: 4),
                           pw.Row(
-                            mainAxisAlignment:
-                                pw.MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
                               pw.Text('Discount:'),
-                              pw.Text('- ₹${discount.toStringAsFixed(2)}'),
+                              pw.Text('- Rs. ${discount.toStringAsFixed(2)}'),
                             ],
                           ),
                         ],
-                        pw.SizedBox(height: 4),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('GST Tax:'),
-                            pw.Text('+ ₹${gstAmount.toStringAsFixed(2)}'),
-                          ],
-                        ),
                         if (serviceChargeAmount > 0) ...[
                           pw.SizedBox(height: 4),
                           pw.Row(
-                            mainAxisAlignment:
-                                pw.MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
                               pw.Text('Service charge:'),
                               pw.Text(
-                                '+ ₹${serviceChargeAmount.toStringAsFixed(2)}',
+                                '+ Rs. ${serviceChargeAmount.toStringAsFixed(2)}',
                               ),
                             ],
                           ),
@@ -180,7 +195,7 @@ class PdfInvoiceHelper {
                               ),
                             ),
                             pw.Text(
-                              '₹${grandTotal.toStringAsFixed(2)}',
+                              'Rs. ${grandTotal.toStringAsFixed(2)}',
                               style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 16,
@@ -209,7 +224,7 @@ class PdfInvoiceHelper {
                     ),
                     pw.SizedBox(height: 4),
                     pw.Text(
-                      'HMB Bills POS Engine',
+                      'HMB Bills POS Engine - Honeymoon Biryani',
                       style: const pw.TextStyle(
                         fontSize: 10,
                         color: PdfColors.grey600,
@@ -239,7 +254,7 @@ class PdfInvoiceHelper {
     await Share.shareXFiles(
       [xFile],
       text:
-          'Here is your invoice #$orderNumber from our food outlet. Thank you for your visit!',
+          'Here is your bill #$orderNumber from Honeymoon Biryani. Thank you for your visit!',
     );
   }
 }

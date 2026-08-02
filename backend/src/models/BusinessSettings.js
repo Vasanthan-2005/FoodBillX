@@ -34,8 +34,13 @@ const businessSettingsSchema = new mongoose.Schema(
     },
     invoicePrefix: {
       type: String,
-      default: 'INV-',
+      default: 'B',
       trim: true,
+    },
+    lastBillSequenceNumber: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     taxPercentage: {
       type: Number,
@@ -52,6 +57,21 @@ const businessSettingsSchema = new mongoose.Schema(
     invoiceFooter: {
       type: String,
       default: 'Thank you for dining with us!',
+      trim: true,
+    },
+    loyaltyTargetVisits: {
+      type: Number,
+      default: 6,
+      min: 1,
+    },
+    loyaltyRewardType: {
+      type: String,
+      default: 'Free Drink',
+      trim: true,
+    },
+    loyaltyRewardDescription: {
+      type: String,
+      default: 'Free Drink',
       trim: true,
     },
   },

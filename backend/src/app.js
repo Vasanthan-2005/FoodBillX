@@ -12,7 +12,6 @@ const customerRoutes = require('./routes/customerRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const expenseCategoryRoutes = require('./routes/expenseCategoryRoutes');
 const reportRoutes = require('./routes/reportRoutes');
-const syncRoutes = require('./routes/syncRoutes');
 
 const app = express();
 
@@ -31,7 +30,6 @@ app.use('/api/v1/customers', customerRoutes);
 app.use('/api/v1/expenses', expenseRoutes);
 app.use('/api/v1/expense-categories', expenseCategoryRoutes);
 app.use('/api/v1/reports', reportRoutes);
-app.use('/api/v1/sync', syncRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'FoodBillX POS Service is healthy' });

@@ -1,53 +1,111 @@
 const Order = require('../models/Order');
 const Expense = require('../models/Expense');
+const Customer = require('../models/Customer');
+const MenuItem = require('../models/MenuItem');
 
 class ReportService {
   async getDashboardSummary() {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const now = new Date();
+    
+    // Today boundary
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    // Yesterday boundary
+    const startOfYesterday = new Date(startOfDay);
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+    const endOfYesterday = new Date(endOfDay);
+    endOfYesterday.setDate(endOfYesterday.getDate() - 1);
 
-    const startOfMonth = new Date(startOfDay.getFullYear(), startOfDay.getMonth(), 1);
+    // Week boundary (last 7 days)
+    const startOfWeek = new Date(startOfDay);
+    startOfWeek.setDate(startOfWeek.getDate() - 6);
 
-    // Today Orders Total & Count
-    const todayOrders = await Order.aggregate([
-      { $match: { createdAt: { $gte: startOfDay, $lte: endOfDay } } },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: '$grandTotal' },
-          orderCount: { $sum: 1 },
-        },
-      },
+    // Month boundary
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+
+    // Completed orders filter condition
+    const validOrderMatch = { orderStatus: { $ne: 'refunded' } };
+
+    // --- REVENUE & ORDERS ---
+    const [todayOrders, yesterdayOrders, weekOrders, monthOrders, overallOrders] = await Promise.all([
+      Order.aggregate([
+        { $match: { ...validOrderMatch, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+        { $group: { _id: null, totalRevenue: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+      ]),
+      Order.aggregate([
+        { $match: { ...validOrderMatch, createdAt: { $gte: startOfYesterday, $lte: endOfYesterday } } },
+        { $group: { _id: null, totalRevenue: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+      ]),
+      Order.aggregate([
+        { $match: { ...validOrderMatch, createdAt: { $gte: startOfWeek, $lte: endOfDay } } },
+        { $group: { _id: null, totalRevenue: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+      ]),
+      Order.aggregate([
+        { $match: { ...validOrderMatch, createdAt: { $gte: startOfMonth, $lte: endOfDay } } },
+        { $group: { _id: null, totalRevenue: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+      ]),
+      Order.aggregate([
+        { $match: validOrderMatch },
+        { $group: { _id: null, totalRevenue: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+      ]),
     ]);
 
-    // Today Expenses Total
-    const todayExpenses = await Expense.aggregate([
-      { $match: { date: { $gte: startOfDay, $lte: endOfDay } } },
-      {
-        $group: {
-          _id: null,
-          totalExpense: { $sum: '$amount' },
-        },
-      },
+    // --- EXPENSES ---
+    const [todayExp, weekExp, monthExp, overallExp] = await Promise.all([
+      Expense.aggregate([
+        { $match: { date: { $gte: startOfDay, $lte: endOfDay } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      Expense.aggregate([
+        { $match: { date: { $gte: startOfWeek, $lte: endOfDay } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      Expense.aggregate([
+        { $match: { date: { $gte: startOfMonth, $lte: endOfDay } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      Expense.aggregate([
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
     ]);
 
-    // Month Revenue
-    const monthOrders = await Order.aggregate([
-      { $match: { createdAt: { $gte: startOfMonth, $lte: endOfDay } } },
-      {
-        $group: {
-          _id: null,
-          monthRevenue: { $sum: '$grandTotal' },
-        },
-      },
-    ]);
+    const todayRevenue = todayOrders[0]?.totalRevenue || 0;
+    const todayOrderCount = todayOrders[0]?.count || 0;
+    const yesterdayRevenue = yesterdayOrders[0]?.totalRevenue || 0;
+    const weekRevenue = weekOrders[0]?.totalRevenue || 0;
+    const weekOrderCount = weekOrders[0]?.count || 0;
+    const monthRevenue = monthOrders[0]?.monthRevenue || monthOrders[0]?.totalRevenue || 0;
+    const monthOrderCount = monthOrders[0]?.count || 0;
+    const overallRevenue = overallOrders[0]?.totalRevenue || 0;
+    const overallOrderCount = overallOrders[0]?.count || 0;
 
-    // Top Selling Items This Month
-    const topSellingItems = await Order.aggregate([
-      { $match: { createdAt: { $gte: startOfMonth, $lte: endOfDay } } },
+    const todayExpenseTotal = todayExp[0]?.total || 0;
+    const weekExpenseTotal = weekExp[0]?.total || 0;
+    const monthExpenseTotal = monthExp[0]?.total || 0;
+    const overallExpenseTotal = overallExp[0]?.total || 0;
+
+    const netProfitToday = todayRevenue - todayExpenseTotal;
+    const weeklyProfit = weekRevenue - weekExpenseTotal;
+    const monthlyProfit = monthRevenue - monthExpenseTotal;
+    const overallProfit = overallRevenue - overallExpenseTotal;
+
+    const averageBillValue = overallOrderCount > 0 ? Math.round(overallRevenue / overallOrderCount) : 0;
+
+    // --- PEAK SELLING HOUR ---
+    const peakHourAgg = await Order.aggregate([
+      { $match: validOrderMatch },
+      { $project: { hour: { $hour: '$createdAt' } } },
+      { $group: { _id: '$hour', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 1 },
+    ]);
+    const peakHourInt = peakHourAgg[0]?._id ?? 13;
+    const peakSellingHour = `${peakHourInt % 12 || 12}:00 ${peakHourInt >= 12 ? 'PM' : 'AM'}`;
+
+    // --- MENU PERFORMANCE ---
+    const itemPerformance = await Order.aggregate([
+      { $match: validOrderMatch },
       { $unwind: '$items' },
       {
         $group: {
@@ -57,22 +115,98 @@ class ReportService {
         },
       },
       { $sort: { totalQuantity: -1 } },
-      { $limit: 5 },
     ]);
 
-    const todayRevenue = todayOrders[0]?.totalRevenue || 0;
-    const todayOrderCount = todayOrders[0]?.orderCount || 0;
-    const todayExpenseTotal = todayExpenses[0]?.totalExpense || 0;
-    const monthRevenue = monthOrders[0]?.monthRevenue || 0;
-    const netProfitToday = todayRevenue - todayExpenseTotal;
+    const bestSellingItems = itemPerformance.slice(0, 5);
+    const leastSellingItems = itemPerformance.slice(-5).reverse();
 
+    // Category Performance
+    const categoryAgg = await Order.aggregate([
+      { $match: validOrderMatch },
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: '$items.name',
+          revenue: { $sum: '$items.subtotal' },
+        },
+      },
+    ]);
+
+    // --- CUSTOMER ANALYTICS ---
+    const [totalCustomers, loyaltyMembers] = await Promise.all([
+      Customer.countDocuments(),
+      Customer.countDocuments({ loyaltyCardNumber: { $exists: true, $ne: '' } }),
+    ]);
+    const returningCustomers = await Customer.countDocuments({ totalVisits: { $gt: 1 } });
+    const newCustomers = Math.max(0, totalCustomers - returningCustomers);
+    const rewardsRedeemed = await Order.countDocuments({ rewardStatus: { $regex: 'Reward Available', $options: 'i' } });
+
+    // --- PAYMENT ANALYTICS ---
+    const paymentAgg = await Order.aggregate([
+      { $match: validOrderMatch },
+      { $group: { _id: '$paymentMethod', total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+    ]);
+    const paymentAnalytics = { cash: 0, upi: 0, card: 0, wallet: 0 };
+    paymentAgg.forEach((p) => {
+      const key = (p._id || 'cash').toLowerCase();
+      paymentAnalytics[key] = p.total;
+    });
+
+    // --- EXPENSE ANALYTICS ---
+    const expenseBreakdown = await Expense.aggregate([
+      { $group: { _id: '$category', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+      { $sort: { total: -1 } },
+    ]);
+
+    // --- DAILY SALES TREND (LAST 7 DAYS) ---
+    const recentDailyRevenue = [];
+    for (let i = 6; i >= 0; i--) {
+      const dayStart = new Date(startOfDay);
+      dayStart.setDate(dayStart.getDate() - i);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const dayOrder = await Order.aggregate([
+        { $match: { ...validOrderMatch, createdAt: { $gte: dayStart, $lte: dayEnd } } },
+        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+      ]);
+      recentDailyRevenue.push(dayOrder[0]?.total || 0.0);
+    }
+
+    // Return merged summary object
     return {
       todayRevenue,
       todayOrderCount,
       todayExpenseTotal,
       netProfitToday,
+      yesterdayRevenue,
+      weekRevenue,
+      weekOrderCount,
+      weekExpenseTotal,
+      weeklyProfit,
       monthRevenue,
-      topSellingItems,
+      monthOrderCount,
+      monthExpenseTotal,
+      monthlyProfit,
+      overallRevenue,
+      overallOrderCount,
+      overallExpenseTotal,
+      overallProfit,
+      averageBillValue,
+      peakSellingHour,
+      topSellingItems: bestSellingItems,
+      leastSellingItems,
+      revenueByItem: itemPerformance,
+      customerAnalytics: {
+        totalCustomers,
+        newCustomers,
+        returningCustomers,
+        loyaltyMembers,
+        rewardsRedeemed,
+      },
+      paymentAnalytics,
+      expenseBreakdown: expenseBreakdown.map((e) => ({ category: e._id || 'Miscellaneous', total: e.total, count: e.count })),
+      recentDailyRevenue,
     };
   }
 }

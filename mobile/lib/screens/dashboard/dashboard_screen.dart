@@ -1,12 +1,13 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/report_export_helper.dart';
+import '../../core/utils/snackbar_utils.dart';
 import '../../core/widgets/metric_card_widget.dart';
 import '../../core/widgets/skeleton_loader.dart';
-import '../../core/widgets/empty_state_widget.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/settings_provider.dart';
 
@@ -29,7 +30,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dashboardState = ref.watch(dashboardProvider);
+    final metrics = ref.watch(dashboardProvider);
     final settings = ref.watch(settingsProvider).settings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -43,27 +44,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const Text(
-              'Commercial POS Insights & Analytics',
+              'Restaurant Business & Financial Reports',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh Insights',
-            onPressed: () => ref.read(dashboardProvider.notifier).refresh(),
+            icon: const Icon(Icons.picture_as_pdf_rounded),
+            tooltip: 'Export PDF Report',
+            onPressed: () async {
+              try {
+                await ReportExportHelper.exportReportToPdf(
+                  metrics,
+                  settings?.businessName ?? 'HMB Bills',
+                );
+              } catch (e) {
+                if (context.mounted) {
+                  SnackbarUtils.showError(context, 'Failed to export PDF report');
+                }
+              }
+            },
           ),
           IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
-            onPressed: widget.onOpenSettings,
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh Reports',
+            onPressed: () => ref.read(dashboardProvider.notifier).refresh(forceSpinner: true),
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
-        child: dashboardState.isLoading
+        onRefresh: () => ref.read(dashboardProvider.notifier).refresh(forceSpinner: true),
+        child: metrics.isLoading
             ? const SingleChildScrollView(
                 physics: AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.all(16),
@@ -83,127 +95,69 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (dashboardState.errorMessage != null)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withAlpha(25),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.orange),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.wifi_off_rounded,
-                              color: Colors.orange,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                dashboardState.errorMessage!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.orange,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => ref
-                                  .read(dashboardProvider.notifier)
-                                  .refresh(forceSpinner: true),
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    // Timeframe Segmented Switcher
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: ['Daily', 'Weekly', 'Monthly'].map((
-                                period,
-                              ) {
-                                final isSelected = _selectedTimeframe == period;
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 8.0),
-                                  child: ChoiceChip(
-                                    label: Text(period),
-                                    selected: isSelected,
-                                    selectedColor: AppColors.primary,
-                                    labelStyle: TextStyle(
-                                      color: isSelected ? Colors.white : null,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    onSelected: (_) {
-                                      setState(
-                                        () => _selectedTimeframe = period,
-                                      );
-                                    },
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            backgroundColor: AppColors.primary,
-                          ),
-                          onPressed: widget.onGoToBilling,
-                          icon: const Icon(
-                            Icons.point_of_sale_rounded,
-                            size: 18,
-                          ),
-                          label: const Text('POS Bill'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
 
-                    // Top Metrics Cards
+                    // Section 1: Revenue & Profit KPI Cards
+                    Text(
+                      '1. Profit & Loss Overview',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Timeframe Switcher
+                    Row(
+                      children: ['Daily', 'Weekly', 'Monthly'].map((period) {
+                        final isSelected = _selectedTimeframe == period;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: ChoiceChip(
+                            label: Text(period),
+                            selected: isSelected,
+                            selectedColor: AppColors.primary,
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.white : null,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            onSelected: (_) => setState(() => _selectedTimeframe = period),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+
                     Row(
                       children: [
                         Expanded(
                           child: MetricCardWidget(
-                            title: "$_selectedTimeframe Sales",
+                            title: "$_selectedTimeframe Revenue",
                             value: CurrencyFormatter.format(
                               switch (_selectedTimeframe) {
-                                'Monthly' => dashboardState.monthRevenue,
-                                'Weekly' => dashboardState.weekRevenue,
-                                _ => dashboardState.todayRevenue,
+                                'Monthly' => metrics.monthRevenue,
+                                'Weekly' => metrics.weekRevenue,
+                                _ => metrics.todayRevenue,
                               },
                             ),
                             icon: Icons.payments_rounded,
                             color: AppColors.secondary,
-                            subtitle: "Revenue",
+                            subtitle: "Gross Sales",
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: MetricCardWidget(
-                            title: "$_selectedTimeframe Orders",
-                            value:
-                                '${switch (_selectedTimeframe) {
-                                  'Monthly' => dashboardState.monthOrderCount,
-                                  'Weekly' => dashboardState.weekOrderCount,
-                                  _ => dashboardState.todayOrderCount,
-                                }}',
-                            icon: Icons.receipt_long_rounded,
-                            color: AppColors.primary,
-                            subtitle: "Volume",
+                            title: "$_selectedTimeframe Expenses",
+                            value: CurrencyFormatter.format(
+                              switch (_selectedTimeframe) {
+                                'Monthly' => metrics.monthExpenseTotal,
+                                'Weekly' => metrics.weekExpenseTotal,
+                                _ => metrics.todayExpenseTotal,
+                              },
+                            ),
+                            icon: Icons.shopping_bag_outlined,
+                            color: Colors.red.shade400,
+                            subtitle: "Operational Costs",
                           ),
                         ),
                       ],
@@ -214,156 +168,235 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       children: [
                         Expanded(
                           child: MetricCardWidget(
-                            title: "Today's Expenses",
+                            title: "$_selectedTimeframe Net Profit",
                             value: CurrencyFormatter.format(
-                              dashboardState.todayExpenseTotal,
+                              switch (_selectedTimeframe) {
+                                'Monthly' => metrics.monthlyProfit,
+                                'Weekly' => metrics.weeklyProfit,
+                                _ => metrics.netProfitToday,
+                              },
                             ),
-                            icon: Icons.shopping_bag_outlined,
-                            color: Colors.red.shade400,
-                            subtitle: "Costs",
+                            icon: Icons.trending_up_rounded,
+                            color: (switch (_selectedTimeframe) {
+                                      'Monthly' => metrics.monthlyProfit,
+                                      'Weekly' => metrics.weeklyProfit,
+                                      _ => metrics.netProfitToday,
+                                    }) >= 0
+                                ? AppColors.secondary
+                                : Colors.red,
+                            subtitle: "Revenue - Expenses",
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: MetricCardWidget(
-                            title: "Today's Net Profit",
-                            value: CurrencyFormatter.format(
-                              dashboardState.netProfitToday,
-                            ),
-                            icon: Icons.trending_up_rounded,
-                            color: dashboardState.netProfitToday >= 0
-                                ? AppColors.secondary
-                                : Colors.red,
-                            subtitle: dashboardState.netProfitToday >= 0
-                                ? "Gain"
-                                : "Loss",
+                            title: "Average Bill Value",
+                            value: CurrencyFormatter.format(metrics.averageBillValue),
+                            icon: Icons.receipt_long_rounded,
+                            color: Colors.blue.shade600,
+                            subtitle: "Per Customer Order",
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 24),
 
-                    if (dashboardState.todayOrderCount == 0 &&
-                        dashboardState.monthRevenue == 0 &&
-                        dashboardState.todayExpenseTotal == 0)
-                      EmptyStateWidget(
-                        iconEmoji: '📈',
-                        title: 'Start selling to view analytics',
-                        description:
-                            'Create your first POS order to unlock live revenue, expense, and profit charts.',
-                        actionLabel: 'Open POS Billing',
-                        onActionPressed: widget.onGoToBilling,
-                      )
-                    else ...[
-                      // Sales Trend Line Chart Card
-                      _buildChartCard(
-                        context,
-                        title: 'Recent Sales Trend',
-                        subtitle:
-                            'Local revenue totals for the last seven days',
-                        child: SizedBox(
-                          height: 180,
-                          child: CustomPaint(
-                            painter: SalesTrendPainter(
-                              isDark: isDark,
-                              primaryColor: AppColors.primary,
-                              accentColor: AppColors.secondary,
-                              values: dashboardState.recentDailyRevenue,
-                            ),
+                    // Section 2: Sales Trends Chart
+                    _buildSectionHeader(context, '2. Sales & Revenue Trends'),
+                    const SizedBox(height: 8),
+
+                    _buildChartCard(
+                      context,
+                      title: '7-Day Revenue Trend',
+                      subtitle: 'Daily gross revenue comparison',
+                      child: SizedBox(
+                        height: 180,
+                        child: CustomPaint(
+                          painter: SalesTrendPainter(
+                            isDark: isDark,
+                            primaryColor: AppColors.primary,
+                            accentColor: AppColors.secondary,
+                            values: metrics.recentDailyRevenue,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                    ),
+                    const SizedBox(height: 24),
 
-                      // Expenses vs Revenue Bar Chart
-                      _buildChartCard(
-                        context,
-                        title: 'Expenses vs Revenue',
-                        subtitle:
-                            'Operational costs compared to gross billing income',
-                        child: SizedBox(
-                          height: 180,
-                          child: CustomPaint(
-                            painter: RevenueExpenseBarPainter(
-                              revenue: dashboardState.todayRevenue,
-                              expense: dashboardState.todayExpenseTotal,
-                              isDark: isDark,
-                            ),
-                          ),
+                    // Section 3: Orders & Operational KPIs
+                    _buildSectionHeader(context, '3. Order Analytics & Operational Insights'),
+                    const SizedBox(height: 8),
+
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            _buildInfoRow('Total Completed Orders', '${metrics.overallOrderCount} orders', Icons.shopping_cart_rounded),
+                            const Divider(height: 20),
+                            _buildInfoRow('Peak Selling Hour', metrics.peakSellingHour, Icons.access_time_filled_rounded),
+                            const Divider(height: 20),
+                            _buildInfoRow('Average Bill Order Value', CurrencyFormatter.format(metrics.averageBillValue), Icons.analytics_rounded),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 20),
+                    ),
+                    const SizedBox(height: 24),
 
-                      // Top Selling Items Section
-                      Text(
-                        "Top Selling Dishes This Month",
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
+                    // Section 4: Menu Dish Performance (Best & Least Selling)
+                    _buildSectionHeader(context, '4. Menu Dish Performance'),
+                    const SizedBox(height: 8),
 
-                      dashboardState.topSellingItems.isEmpty
-                          ? const Card(
-                              child: Padding(
-                                padding: EdgeInsets.all(20.0),
-                                child: Center(
-                                  child: Text(
-                                    'No item sales recorded yet this month',
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Card(
-                              child: Column(
-                                children: dashboardState.topSellingItems.map((
-                                  item,
-                                ) {
-                                  final name = item['_id'] ?? 'Dish';
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Top 5 Best Selling Dishes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            const SizedBox(height: 10),
+                            if (metrics.topSellingItems.isEmpty)
+                              const Text('No item sales recorded yet.', style: TextStyle(color: Colors.grey))
+                            else
+                              Column(
+                                children: metrics.topSellingItems.map((item) {
+                                  final name = item['_id']?.toString() ?? 'Dish';
                                   final qty = item['totalQuantity'] ?? 0;
-                                  final sales =
-                                      (item['totalSales'] as num?)
-                                          ?.toDouble() ??
-                                      0.0;
-
+                                  final sales = (item['totalSales'] as num?)?.toDouble() ?? 0.0;
                                   return ListTile(
-                                    leading: Container(
-                                      width: 38,
-                                      height: 38,
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary.withAlpha(30),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Center(
-                                        child: Text(
-                                          '🍔',
-                                          style: TextStyle(fontSize: 18),
-                                        ),
-                                      ),
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: const CircleAvatar(
+                                      child: Text('🔥', style: TextStyle(fontSize: 16)),
                                     ),
-                                    title: Text(
-                                      name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    subtitle: Text('$qty orders sold'),
-                                    trailing: Text(
-                                      CurrencyFormatter.format(sales),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.secondary,
-                                      ),
-                                    ),
+                                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    subtitle: Text('$qty units sold'),
+                                    trailing: Text(CurrencyFormatter.format(sales), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.secondary)),
                                   );
                                 }).toList(),
                               ),
-                            ).animate().fadeIn(duration: 400.ms),
-                    ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Section 5: Customer & Loyalty Analytics
+                    _buildSectionHeader(context, '5. Customer & Loyalty Analytics'),
+                    const SizedBox(height: 8),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: MetricCardWidget(
+                            title: "Total Registered",
+                            value: '${metrics.customerAnalytics['totalCustomers'] ?? 0}',
+                            icon: Icons.people_rounded,
+                            color: Colors.purple,
+                            subtitle: "Total Guests",
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: MetricCardWidget(
+                            title: "Loyalty Members",
+                            value: '${metrics.customerAnalytics['loyaltyMembers'] ?? 0}',
+                            icon: Icons.card_membership_rounded,
+                            color: Colors.amber.shade800,
+                            subtitle: "With Loyalty Card",
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: MetricCardWidget(
+                            title: "Returning Guests",
+                            value: '${metrics.customerAnalytics['returningCustomers'] ?? 0}',
+                            icon: Icons.repeat_rounded,
+                            color: Colors.blue,
+                            subtitle: ">1 Visit",
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: MetricCardWidget(
+                            title: "Rewards Redeemed",
+                            value: '${metrics.customerAnalytics['rewardsRedeemed'] ?? 0}',
+                            icon: Icons.stars_rounded,
+                            color: Colors.green,
+                            subtitle: "Freebies Claimed",
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Section 6: Payment Methods Breakdown
+                    _buildSectionHeader(context, '6. Payment Breakdown'),
+                    const SizedBox(height: 8),
+
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            _buildPaymentRow('Cash Payments', (metrics.paymentAnalytics['cash'] as num?)?.toDouble() ?? 0.0, Icons.money_rounded, Colors.green),
+                            const Divider(height: 20),
+                            _buildPaymentRow('UPI / QR Payments', (metrics.paymentAnalytics['upi'] as num?)?.toDouble() ?? 0.0, Icons.qr_code_2_rounded, Colors.blue),
+                            const Divider(height: 20),
+                            _buildPaymentRow('Card Payments', (metrics.paymentAnalytics['card'] as num?)?.toDouble() ?? 0.0, Icons.credit_card_rounded, Colors.purple),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
       ),
+    );
+  }
+
+  Widget _buildSectionHeader(BuildContext context, String title) {
+    return Text(
+      title,
+      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.primary, size: 22),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        ),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      ],
+    );
+  }
+
+  Widget _buildPaymentRow(String label, double amount, IconData icon, Color color) {
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: color.withAlpha(30),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        ),
+        Text(CurrencyFormatter.format(amount), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: color)),
+      ],
     );
   }
 
@@ -388,18 +421,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 2),
           Text(
             subtitle,
             style: TextStyle(
               fontSize: 12,
-              color: isDark
-                  ? AppColors.darkTextSecondary
-                  : AppColors.lightTextSecondary,
+              color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
             ),
           ),
           const SizedBox(height: 16),
@@ -430,7 +458,6 @@ class SalesTrendPainter extends CustomPainter {
       ..color = isDark ? Colors.white10 : Colors.black12
       ..strokeWidth = 1;
 
-    // Draw background grid lines
     for (double i = 0; i <= size.height; i += size.height / 3) {
       canvas.drawLine(Offset(0, i), Offset(size.width, i), gridPaint);
     }
@@ -460,7 +487,6 @@ class SalesTrendPainter extends CustomPainter {
       );
     }
 
-    // Fill Gradient under curve
     final fillPath = Path.from(path)
       ..lineTo(size.width, size.height)
       ..lineTo(0, size.height)
@@ -475,7 +501,6 @@ class SalesTrendPainter extends CustomPainter {
 
     canvas.drawPath(fillPath, fillPaint);
 
-    // Stroke line
     final linePaint = Paint()
       ..color = primaryColor
       ..strokeWidth = 3.5
@@ -484,7 +509,6 @@ class SalesTrendPainter extends CustomPainter {
 
     canvas.drawPath(path, linePaint);
 
-    // Draw Data Point Circles
     final dotPaint = Paint()..color = Colors.white;
     final dotBorderPaint = Paint()
       ..color = primaryColor
@@ -500,52 +524,4 @@ class SalesTrendPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant SalesTrendPainter oldDelegate) =>
       oldDelegate.values != values || oldDelegate.isDark != isDark;
-}
-
-// Custom Painter for Revenue vs Expenses Bar Chart
-class RevenueExpenseBarPainter extends CustomPainter {
-  final double revenue;
-  final double expense;
-  final bool isDark;
-
-  RevenueExpenseBarPainter({
-    required this.revenue,
-    required this.expense,
-    required this.isDark,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final maxVal = math.max(revenue, expense) * 1.2;
-    if (maxVal == 0) return;
-
-    final revHeight = (revenue / maxVal) * size.height;
-    final expHeight = (expense / maxVal) * size.height;
-
-    final barWidth = size.width * 0.28;
-    final revX = size.width * 0.2;
-    final expX = size.width * 0.52;
-
-    // Revenue Bar
-    final revRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(revX, size.height - revHeight, barWidth, revHeight),
-      const Radius.circular(8),
-    );
-    final revPaint = Paint()..color = AppColors.secondary;
-    canvas.drawRRect(revRect, revPaint);
-
-    // Expense Bar
-    final expRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(expX, size.height - expHeight, barWidth, expHeight),
-      const Radius.circular(8),
-    );
-    final expPaint = Paint()..color = Colors.red.shade400;
-    canvas.drawRRect(expRect, expPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant RevenueExpenseBarPainter oldDelegate) =>
-      oldDelegate.revenue != revenue ||
-      oldDelegate.expense != expense ||
-      oldDelegate.isDark != isDark;
 }

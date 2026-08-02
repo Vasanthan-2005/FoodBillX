@@ -28,6 +28,33 @@ class OrderController {
       next(error);
     }
   }
+
+  async updateOrder(req, res, next) {
+    try {
+      const order = await orderService.updateOrder(req.params.id, req.body);
+      return sendSuccess(res, 200, 'Order updated successfully', { order });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async refundOrder(req, res, next) {
+    try {
+      const order = await orderService.refundOrder(req.params.id);
+      return sendSuccess(res, 200, 'Order refunded successfully', { order });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteOrder(req, res, next) {
+    try {
+      const result = await orderService.deleteOrder(req.params.id);
+      return sendSuccess(res, 200, result.message);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new OrderController();

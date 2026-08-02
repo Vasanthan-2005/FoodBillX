@@ -13,12 +13,6 @@ const customerSchema = new mongoose.Schema(
       trim: true,
       unique: true,
     },
-    email: {
-      type: String,
-      lowercase: true,
-      trim: true,
-      default: '',
-    },
     address: {
       type: String,
       default: '',
@@ -54,7 +48,8 @@ const customerSchema = new mongoose.Schema(
   }
 );
 
-customerSchema.index({ loyaltyCardNumber: 1 });
+customerSchema.index({ loyaltyCardNumber: 1 }, { unique: true, sparse: true });
 
 const Customer = mongoose.model('Customer', customerSchema);
 module.exports = Customer;
+

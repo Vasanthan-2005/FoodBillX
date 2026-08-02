@@ -14,11 +14,15 @@ class CustomerRepository {
   Future<List<CustomerModel>> getAll({
     String? search,
     String? cardNumber,
+    String? phone,
   }) async {
     final queryParams = <String, dynamic>{};
     if (search != null && search.isNotEmpty) queryParams['search'] = search;
     if (cardNumber != null && cardNumber.isNotEmpty) {
       queryParams['cardNumber'] = cardNumber;
+    }
+    if (phone != null && phone.isNotEmpty) {
+      queryParams['phone'] = phone;
     }
 
     dynamic data;

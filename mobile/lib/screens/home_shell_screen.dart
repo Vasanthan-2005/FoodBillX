@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../core/constants/app_colors.dart';
-import '../providers/customer_provider.dart';
-import '../providers/dashboard_provider.dart';
-import '../providers/expense_provider.dart';
-import '../providers/menu_provider.dart';
-import '../providers/orders_provider.dart';
-import '../providers/settings_provider.dart';
+import '../core/widgets/onboarding_dialog.dart';
 import 'billing/billing_screen.dart';
 import 'customers/customer_management_screen.dart';
 import 'dashboard/dashboard_screen.dart';
@@ -34,18 +30,8 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
     _pages[0] = _buildPage(0);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _prefetchAppData();
+      OnboardingDialog.showIfNeeded(context);
     });
-  }
-
-  void _prefetchAppData() {
-    if (!mounted) return;
-    ref.read(menuProvider.notifier).loadCategoriesAndItems();
-    ref.read(customerProvider.notifier).loadCustomers();
-    ref.read(dashboardProvider.notifier).refresh();
-    ref.read(settingsProvider.notifier).loadSettings();
-    ref.read(expenseProvider.notifier).loadAll();
-    ref.read(ordersProvider.notifier).loadOrders();
   }
 
   void _onSelectTab(int index) {
@@ -63,11 +49,11 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
     );
   }
 
-  void _openMenuManagement() {
+  void _openPreviousOrders() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => MenuManagementScreen(onOpenSettings: _openSettings),
+        builder: (_) => OrdersScreen(onOpenSettings: _openSettings),
       ),
     );
   }
@@ -87,15 +73,15 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         key: const PageStorageKey('HomeDashboardScreen'),
         onNavigateToTab: _onSelectTab,
         onOpenSettings: _openSettings,
-        onOpenMenu: _openMenuManagement,
+        onOpenOrders: _openPreviousOrders,
         onOpenExpenses: _openExpenseTracker,
       ),
       1 => BillingScreen(
         key: const PageStorageKey('BillingScreen'),
         onOpenSettings: _openSettings,
       ),
-      2 => OrdersScreen(
-        key: const PageStorageKey('OrdersScreen'),
+      2 => MenuManagementScreen(
+        key: const PageStorageKey('MenuManagementScreen'),
         onOpenSettings: _openSettings,
       ),
       3 => CustomerManagementScreen(
@@ -103,7 +89,7 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         onOpenSettings: _openSettings,
       ),
       4 => DashboardScreen(
-        key: const PageStorageKey('DashboardScreen'),
+        key: const PageStorageKey('ReportsScreen'),
         onGoToBilling: () => _onSelectTab(1),
         onOpenSettings: _openSettings,
       ),
@@ -136,22 +122,28 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         label: 'Billing',
       ),
       NavigationDestination(
-        icon: Icon(Icons.receipt_long_outlined),
+        icon: Icon(Icons.restaurant_menu_outlined),
         selectedIcon: Icon(
-          Icons.receipt_long_rounded,
+          Icons.restaurant_menu_rounded,
           color: AppColors.primary,
         ),
-        label: 'Orders',
+        label: 'Menu',
       ),
       NavigationDestination(
         icon: Icon(Icons.people_alt_outlined),
-        selectedIcon: Icon(Icons.people_alt_rounded, color: AppColors.primary),
+        selectedIcon: Icon(
+          Icons.people_alt_rounded,
+          color: AppColors.primary,
+        ),
         label: 'Customers',
       ),
       NavigationDestination(
-        icon: Icon(Icons.analytics_outlined),
-        selectedIcon: Icon(Icons.analytics_rounded, color: AppColors.primary),
-        label: 'Insights',
+        icon: Icon(Icons.bar_chart_outlined),
+        selectedIcon: Icon(
+          Icons.bar_chart_rounded,
+          color: AppColors.primary,
+        ),
+        label: 'Reports',
       ),
     ];
 

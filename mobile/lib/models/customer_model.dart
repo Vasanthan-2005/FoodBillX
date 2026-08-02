@@ -2,7 +2,6 @@ class CustomerModel {
   final String id;
   final String name;
   final String phone;
-  final String email;
   final String address;
   final String notes;
   final String loyaltyCardNumber;
@@ -16,7 +15,6 @@ class CustomerModel {
     required this.id,
     required this.name,
     required this.phone,
-    this.email = '',
     this.address = '',
     this.notes = '',
     this.loyaltyCardNumber = '',
@@ -32,7 +30,6 @@ class CustomerModel {
       id: json['_id'] ?? json['id'] ?? '',
       name: json['name'] ?? '',
       phone: json['phone'] ?? '',
-      email: json['email'] ?? '',
       address: json['address'] ?? '',
       notes: json['notes'] ?? '',
       loyaltyCardNumber: json['loyaltyCardNumber'] ?? json['cardNumber'] ?? '',
@@ -53,7 +50,6 @@ class CustomerModel {
       'id': id,
       'name': name,
       'phone': phone,
-      'email': email,
       'address': address,
       'notes': notes,
       'loyaltyCardNumber': loyaltyCardNumber,
