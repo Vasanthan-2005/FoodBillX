@@ -67,3 +67,44 @@ exports.verifyOwnerIdentity = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Master Level 1 Authentication
+ * 
+ * Verifies Master ID and Master Password against backend environment variables.
+ */
+exports.masterLogin = async (req, res, next) => {
+  try {
+    const { masterId, masterPassword } = req.body;
+
+    if (!masterId || !masterPassword || typeof masterId !== 'string' || typeof masterPassword !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Master ID and Master Password are required.',
+      });
+    }
+
+    const envMasterId = process.env.MASTER_ID || 'admin';
+    const envMasterPassword = process.env.MASTER_PASSWORD || 'masterpass123';
+
+    const cleanInputId = masterId.trim();
+    const cleanInputPass = masterPassword.trim();
+
+    if (cleanInputId === envMasterId && cleanInputPass === envMasterPassword) {
+      return res.status(200).json({
+        success: true,
+        message: 'Master authentication successful.',
+        data: {
+          authenticated: true,
+        },
+      });
+    }
+
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid Master ID or Password. Access denied.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};

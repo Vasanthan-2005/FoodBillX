@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/storage_service.dart';
 
-enum PinFlowMode { checking, createPin, confirmPin, enterPin, unlocked }
+enum PinFlowMode { checking, masterLogin, createPin, confirmPin, enterPin, unlocked }
 
 class PinAuthState {
   final PinFlowMode mode;
@@ -62,8 +62,12 @@ class PinAuthNotifier extends StateNotifier<PinAuthState> {
     if (exists) {
       state = PinAuthState(mode: PinFlowMode.enterPin);
     } else {
-      state = PinAuthState(mode: PinFlowMode.createPin);
+      state = PinAuthState(mode: PinFlowMode.masterLogin);
     }
+  }
+
+  void setMode(PinFlowMode mode) {
+    state = PinAuthState(mode: mode);
   }
 
   void appendDigit(String digit) {

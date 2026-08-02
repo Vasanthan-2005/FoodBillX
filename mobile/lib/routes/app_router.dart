@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/pin_auth_provider.dart';
+import '../screens/auth/master_login_screen.dart';
 import '../screens/auth/owner_verification_screen.dart';
 import '../screens/auth/pin_screen.dart';
 import '../screens/auth/reset_pin_screen.dart';
@@ -48,11 +49,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      if (!isUnlocked && uri != '/pin' && !isForgotPin) {
-        return '/pin';
+      if (pinState.mode == PinFlowMode.masterLogin && uri != '/master-login') {
+        return '/master-login';
       }
 
-      if (isUnlocked && (uri == '/pin' || uri == '/splash' || isForgotPin)) {
+      if (!isUnlocked &&
+          uri != '/pin' &&
+          uri != '/master-login' &&
+          !isForgotPin) {
+        return pinState.mode == PinFlowMode.masterLogin
+            ? '/master-login'
+            : '/pin';
+      }
+
+      if (isUnlocked &&
+          (uri == '/pin' ||
+              uri == '/splash' ||
+              uri == '/master-login' ||
+              isForgotPin)) {
         return '/home';
       }
 
@@ -62,6 +76,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/master-login',
+        builder: (context, state) => const MasterLoginScreen(),
       ),
       GoRoute(
         path: '/pin',

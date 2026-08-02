@@ -48,4 +48,34 @@ describe('Owner Verification API Unit Tests', () => {
     expect(res.statusCode).toBe(400);
     expect(res.body.success).toBe(false);
   });
+
+  describe('Master Login API Tests', () => {
+    it('should authenticate master login with valid credentials', async () => {
+      process.env.MASTER_ID = 'admin';
+      process.env.MASTER_PASSWORD = 'masterpass123';
+
+      const res = await request(app)
+        .post('/api/v1/auth/master-login')
+        .send({
+          masterId: 'admin',
+          masterPassword: 'masterpass123',
+        });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.authenticated).toBe(true);
+    });
+
+    it('should reject master login with invalid password', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/master-login')
+        .send({
+          masterId: 'admin',
+          masterPassword: 'wrongpassword',
+        });
+
+      expect(res.statusCode).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+  });
 });
