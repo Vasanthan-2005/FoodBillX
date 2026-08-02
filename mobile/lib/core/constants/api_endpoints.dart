@@ -76,6 +76,7 @@ class ApiEndpoints {
   static const String getProfile = '/auth/me';
   static const String updateProfile = '/auth/profile';
   static const String changePassword = '/auth/change-password';
+  static const String verifyOwner = '/auth/verify-owner';
 
   // Business Settings
   static const String settings = '/settings';

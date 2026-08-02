@@ -149,6 +149,18 @@ class PinAuthNotifier extends StateNotifier<PinAuthState> {
     return ok;
   }
 
+  Future<bool> resetPinDirectly(String newPin) async {
+    final ok = await _storage.resetPin(newPin);
+    if (ok) {
+      state = PinAuthState(
+        mode: PinFlowMode.enterPin,
+        currentInput: '',
+        failedAttempts: 0,
+      );
+    }
+    return ok;
+  }
+
   void lockApp() async {
     final exists = await _storage.hasPin();
     state = PinAuthState(

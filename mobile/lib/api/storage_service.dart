@@ -36,4 +36,8 @@ class StorageService {
     if (!isCorrect) return false;
     return await savePin(newPin);
   }
+
+  Future<bool> resetPin(String newPin) async {
+    return await savePin(newPin);
+  }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../providers/forgot_pin_provider.dart';
 import '../../providers/pin_auth_provider.dart';
 
 class PinScreen extends ConsumerWidget {
@@ -217,6 +219,22 @@ class PinScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
+                      if (state.mode == PinFlowMode.enterPin) ...[
+                        const SizedBox(height: 24),
+                        TextButton.icon(
+                          onPressed: () =>
+                              _showForgotPinConfirmationDialog(context, ref),
+                          icon:
+                              const Icon(Icons.help_outline_rounded, size: 18),
+                          label: const Text(
+                            'Forgot PIN?',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],
@@ -224,6 +242,47 @@ class PinScreen extends ConsumerWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showForgotPinConfirmationDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.shield_outlined, color: AppColors.primary),
+            SizedBox(width: 10),
+            Text(
+              'Reset Security PIN',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+        content: const Text(
+          'To protect your business and billing data, store owner identity verification is required before resetting your PIN.\n\nWould you like to proceed with identity verification?',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(forgotPinProvider.notifier).resetFlow();
+              context.go('/forgot-pin/verify');
+            },
+            icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+            label: const Text('Proceed to Verify'),
+          ),
+        ],
       ),
     );
   }

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/pin_auth_provider.dart';
+import '../screens/auth/owner_verification_screen.dart';
 import '../screens/auth/pin_screen.dart';
+import '../screens/auth/reset_pin_screen.dart';
 import '../screens/home_shell_screen.dart';
 import '../screens/splash/splash_screen.dart';
 
@@ -35,6 +37,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final pinState = ref.read(pinAuthProvider);
       final isUnlocked = pinState.mode == PinFlowMode.unlocked;
       final uri = state.uri.toString();
+      final isForgotPin = uri.startsWith('/forgot-pin');
 
       // Allow splash screen to render without initial redirect interruption
       if (uri == '/splash') {
@@ -45,11 +48,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      if (!isUnlocked && uri != '/pin') {
+      if (!isUnlocked && uri != '/pin' && !isForgotPin) {
         return '/pin';
       }
 
-      if (isUnlocked && (uri == '/pin' || uri == '/splash')) {
+      if (isUnlocked && (uri == '/pin' || uri == '/splash' || isForgotPin)) {
         return '/home';
       }
 
@@ -63,6 +66,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/pin',
         builder: (context, state) => const PinScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-pin/verify',
+        builder: (context, state) => const OwnerVerificationScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-pin/reset',
+        builder: (context, state) => const ResetPinScreen(),
       ),
       GoRoute(
         path: '/home',
