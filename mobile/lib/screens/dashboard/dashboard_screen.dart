@@ -32,6 +32,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _selectedTimeframe = 'Daily';
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(dashboardProvider.notifier).refresh();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final metrics = ref.watch(dashboardProvider);
     final settings = ref.watch(settingsProvider).settings;

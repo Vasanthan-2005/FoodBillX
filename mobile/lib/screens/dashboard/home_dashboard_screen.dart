@@ -16,7 +16,7 @@ import '../../core/widgets/revenue_line_chart_widget.dart';
 
 import '../../core/widgets/live_badge_widget.dart';
 
-class HomeDashboardScreen extends ConsumerWidget {
+class HomeDashboardScreen extends ConsumerStatefulWidget {
   final Function(int tabIndex) onNavigateToTab;
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenOrders;
@@ -31,7 +31,20 @@ class HomeDashboardScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
+}
+
+class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(dashboardProvider.notifier).refresh();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final metrics = ref.watch(dashboardProvider);
     final settings = ref.watch(settingsProvider).settings;
     final customerState = ref.watch(customerProvider);
@@ -96,17 +109,17 @@ class HomeDashboardScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.receipt_long_rounded),
             tooltip: 'Previous Orders',
-            onPressed: onOpenOrders,
+            onPressed: widget.onOpenOrders,
           ),
           IconButton(
             icon: const Icon(Icons.currency_rupee_rounded),
             tooltip: 'Add Expense',
-            onPressed: onOpenExpenses,
+            onPressed: widget.onOpenExpenses,
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
-            onPressed: onOpenSettings,
+            onPressed: widget.onOpenSettings,
           ),
         ],
       ),
@@ -220,7 +233,7 @@ class HomeDashboardScreen extends ConsumerWidget {
                         ),
                   ),
                   TextButton.icon(
-                    onPressed: () => onNavigateToTab(4), // Reports (Tab 4)
+                    onPressed: () => widget.onNavigateToTab(4), // Reports (Tab 4)
                     icon: const Icon(Icons.chevron_right_rounded, size: 18),
                     label: const Text('Full Reports'),
                   ),

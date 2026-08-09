@@ -149,10 +149,12 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   DashboardNotifier(this._apiClient) : super(DashboardState());
 
   void populateFromData(Map<String, dynamic> summary) {
-    final todayRevenue = (summary['todayRevenue'] as num?)?.toDouble() ?? 0.0;
-    final todayOrderCount = (summary['todayOrderCount'] as num?)?.toInt() ?? 0;
-    final todayExpenseTotal = (summary['todayExpenseTotal'] as num?)?.toDouble() ?? 0.0;
-    final netProfitToday = (summary['netProfitToday'] as num?)?.toDouble() ?? (todayRevenue - todayExpenseTotal);
+    final kpis = summary['kpis'] is Map ? Map<String, dynamic>.from(summary['kpis']) : <String, dynamic>{};
+
+    final todayRevenue = (summary['todayRevenue'] as num?)?.toDouble() ?? (kpis['revenue'] as num?)?.toDouble() ?? 0.0;
+    final todayOrderCount = (summary['todayOrderCount'] as num?)?.toInt() ?? (kpis['ordersCount'] as num?)?.toInt() ?? 0;
+    final todayExpenseTotal = (summary['todayExpenseTotal'] as num?)?.toDouble() ?? (kpis['totalExpenses'] as num?)?.toDouble() ?? 0.0;
+    final netProfitToday = (summary['netProfitToday'] as num?)?.toDouble() ?? (kpis['netProfit'] as num?)?.toDouble() ?? (todayRevenue - todayExpenseTotal);
 
     final yesterdayRevenue = (summary['yesterdayRevenue'] as num?)?.toDouble() ?? 0.0;
     final weekRevenue = (summary['weekRevenue'] as num?)?.toDouble() ?? 0.0;

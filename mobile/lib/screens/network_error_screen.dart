@@ -3,11 +3,106 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/constants/api_endpoints.dart';
 import '../core/constants/app_colors.dart';
 import '../providers/bootstrap_provider.dart';
 
 class NetworkErrorScreen extends ConsumerWidget {
   const NetworkErrorScreen({super.key});
+
+  void _showServerUrlDialog(BuildContext context) {
+    final controller = TextEditingController(text: ApiEndpoints.baseUrl);
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.dns_rounded, color: AppColors.primary, size: 24),
+              SizedBox(width: 10),
+              Text(
+                'Configure Server Address',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Enter your backend server API URL (Cloud or Local Wi-Fi IP):',
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Server URL',
+                    labelStyle: TextStyle(color: Colors.grey.shade400),
+                    hintText: 'https://foodbillx.onrender.com/api/v1',
+                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ActionChip(
+                      backgroundColor: AppColors.primary.withAlpha(40),
+                      label: const Text('Live Cloud Server', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onPressed: () {
+                        controller.text = ApiEndpoints.liveProductionUrl;
+                      },
+                    ),
+                    ActionChip(
+                      backgroundColor: Colors.white10,
+                      label: const Text('Default LAN IP', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onPressed: () {
+                        controller.text = ApiEndpoints.defaultLanIp;
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final input = controller.text.trim();
+                await ApiEndpoints.saveCustomServerUrl(input);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) context.go('/splash');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Save & Reconnect'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -79,7 +174,29 @@ class NetworkErrorScreen extends ConsumerWidget {
                   ),
                 ).animate().fade(delay: 350.ms, duration: 500.ms),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 12),
+
+                // Current Server IP Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.link_rounded, size: 14, color: Colors.grey),
+                      const SizedBox(width: 6),
+                      Text(
+                        ApiEndpoints.baseUrl,
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 32),
 
                 // Retry Button
                 SizedBox(
@@ -126,6 +243,22 @@ class NetworkErrorScreen extends ConsumerWidget {
                           ),
                   ),
                 ).animate().fade(delay: 500.ms, duration: 400.ms),
+
+                const SizedBox(height: 12),
+
+                // Configure Server URL Button
+                OutlinedButton.icon(
+                  onPressed: () => _showServerUrlDialog(context),
+                  icon: const Icon(Icons.settings_input_component_rounded, size: 18),
+                  label: const Text('Change Server Address'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    side: const BorderSide(color: Colors.white24),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ).animate().fade(delay: 600.ms, duration: 400.ms),
               ],
             ),
           ),

@@ -29,7 +29,7 @@ class BootstrapService {
       Order.find().sort({ createdAt: -1 }).limit(50),
       Expense.find().sort({ createdAt: -1 }).limit(50),
       ExpenseCategory.find().sort({ name: 1 }),
-      reportService.getFilteredAnalytics({ period: 'today' }),
+      reportService.getDashboardSummary(),
     ]);
 
     return {

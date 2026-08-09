@@ -13,6 +13,8 @@ import 'menu/menu_management_screen.dart';
 import 'reports/orders_screen.dart';
 import 'settings/settings_screen.dart';
 
+import '../providers/dashboard_provider.dart';
+
 class HomeShellScreen extends ConsumerStatefulWidget {
   const HomeShellScreen({super.key});
 
@@ -43,6 +45,10 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
       _pages[index] ??= _buildPage(index);
       _currentIndex = index;
     });
+
+    if (index == 0 || index == 4) {
+      ref.read(dashboardProvider.notifier).refresh();
+    }
   }
 
   void _openSettings() {
