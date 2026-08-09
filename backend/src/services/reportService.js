@@ -95,7 +95,7 @@ class ReportService {
     // --- PEAK SELLING HOUR ---
     const peakHourAgg = await Order.aggregate([
       { $match: validOrderMatch },
-      { $project: { hour: { $hour: '$createdAt' } } },
+      { $project: { hour: { $hour: { date: '$createdAt', timezone: process.env.TZ || 'Asia/Kolkata' } } } },
       { $group: { _id: '$hour', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 1 },
@@ -447,7 +447,7 @@ class ReportService {
 
     const hourlyAgg = await Order.aggregate([
       { $match: validOrderMatch },
-      { $project: { hour: { $hour: '$createdAt' }, grandTotal: 1 } },
+      { $project: { hour: { $hour: { date: '$createdAt', timezone: process.env.TZ || 'Asia/Kolkata' } }, grandTotal: 1 } },
       { $group: { _id: '$hour', total: { $sum: '$grandTotal' }, count: { $sum: 1 } } }
     ]);
 

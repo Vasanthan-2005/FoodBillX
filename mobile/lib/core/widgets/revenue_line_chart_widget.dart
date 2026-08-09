@@ -258,6 +258,7 @@ class RevenueLineChartWidget extends StatelessWidget {
                     LineChartBarData(
                       spots: spots,
                       isCurved: true,
+                      preventCurveOverShooting: true,
                       curveSmoothness: 0.35,
                       barWidth: 3.5,
                       color: primaryLineColor,
