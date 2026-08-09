@@ -315,12 +315,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       onPressed: cartState.isSubmitting
                           ? null
                           : () async {
-                              if (cartState.loyaltyCardNumber.isEmpty &&
-                                  cartState.customerId == null) {
-                                _showQuickRegisterCustomerDialog(context, ref);
-                                return;
-                              }
-
                               final result = await notifier.checkoutAndGenerateInvoice();
                               if (context.mounted) {
                                 Navigator.pop(context);

@@ -6,23 +6,24 @@ const MenuItem = require('../models/MenuItem');
 class ReportService {
   async getDashboardSummary() {
     const now = new Date();
-    
-    // Today boundary
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const tz = process.env.TZ || 'Asia/Kolkata';
+    const istDateStr = now.toLocaleDateString('en-CA', { timeZone: tz });
+    const [y, m, d] = istDateStr.split('-').map(Number);
+    const tzOffsetMs = 5.5 * 3600 * 1000;
+
+    // Today boundary in IST (represented in UTC Date)
+    const startOfDay = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - tzOffsetMs);
+    const endOfDay = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999) - tzOffsetMs);
 
     // Yesterday boundary
-    const startOfYesterday = new Date(startOfDay);
-    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-    const endOfYesterday = new Date(endOfDay);
-    endOfYesterday.setDate(endOfYesterday.getDate() - 1);
+    const startOfYesterday = new Date(startOfDay.getTime() - 24 * 3600 * 1000);
+    const endOfYesterday = new Date(endOfDay.getTime() - 24 * 3600 * 1000);
 
     // Week boundary (last 7 days)
-    const startOfWeek = new Date(startOfDay);
-    startOfWeek.setDate(startOfWeek.getDate() - 6);
+    const startOfWeek = new Date(startOfDay.getTime() - 6 * 24 * 3600 * 1000);
 
     // Month boundary
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const startOfMonth = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0) - tzOffsetMs);
 
     // Completed orders filter condition
     const validOrderMatch = { orderStatus: { $ne: 'refunded' } };
@@ -158,7 +159,7 @@ class ReportService {
       { $sort: { total: -1 } },
     ]);
 
-    // --- HOURLY SALES TREND (TODAY 6 INTERVALS) ---
+    // --- HOURLY SALES TREND (TODAY 6 INTERVALS IN IST) ---
     const hourlyRevenueToday = [];
     const hourlyRanges = [
       [0, 3],
@@ -170,10 +171,8 @@ class ReportService {
     ];
 
     for (const [startHour, endHour] of hourlyRanges) {
-      const slotStart = new Date(startOfDay);
-      slotStart.setHours(startHour, 0, 0, 0);
-      const slotEnd = new Date(startOfDay);
-      slotEnd.setHours(endHour, 59, 59, 999);
+      const slotStart = new Date(Date.UTC(y, m - 1, d, startHour, 0, 0, 0) - tzOffsetMs);
+      const slotEnd = new Date(Date.UTC(y, m - 1, d, endHour, 59, 59, 999) - tzOffsetMs);
 
       const slotOrder = await Order.aggregate([
         { $match: { ...validOrderMatch, createdAt: { $gte: slotStart, $lte: slotEnd } } },
@@ -182,16 +181,14 @@ class ReportService {
       hourlyRevenueToday.push(slotOrder[0]?.total || 0.0);
     }
 
-    // --- DAILY SALES TREND (CURRENT WEEK: SUN -> SAT) ---
+    // --- DAILY SALES TREND (CURRENT WEEK: SUN -> SAT IN IST) ---
     const recentDailyRevenue = [];
-    const sunOfWeek = new Date(startOfDay);
-    sunOfWeek.setDate(sunOfWeek.getDate() - sunOfWeek.getDay()); // Sunday of current week
+    const currentDayOfWeek = new Date(now.getTime() + tzOffsetMs).getUTCDay();
+    const sunOfWeek = new Date(startOfDay.getTime() - (currentDayOfWeek * 24 * 3600 * 1000));
 
     for (let i = 0; i < 7; i++) {
-      const dayStart = new Date(sunOfWeek);
-      dayStart.setDate(dayStart.getDate() + i);
-      const dayEnd = new Date(dayStart);
-      dayEnd.setHours(23, 59, 59, 999);
+      const dayStart = new Date(sunOfWeek.getTime() + (i * 24 * 3600 * 1000));
+      const dayEnd = new Date(dayStart.getTime() + (24 * 3600 * 1000 - 1));
 
       const dayOrder = await Order.aggregate([
         { $match: { ...validOrderMatch, createdAt: { $gte: dayStart, $lte: dayEnd } } },
