@@ -108,7 +108,7 @@ class OrderModel {
       paymentMethod: json['paymentMethod'] ?? 'cash',
       paymentStatus: json['paymentStatus'] ?? 'paid',
       createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
+          ? (DateTime.tryParse(json['createdAt'].toString())?.toLocal() ?? DateTime.now())
           : DateTime.now(),
     );
   }

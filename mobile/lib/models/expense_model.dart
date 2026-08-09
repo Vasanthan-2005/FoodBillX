@@ -19,7 +19,7 @@ class ExpenseModel {
     final rawDate = json['date'] ?? json['createdAt'];
     DateTime parsedDate = DateTime.now();
     if (rawDate != null) {
-      parsedDate = DateTime.tryParse(rawDate.toString()) ?? DateTime.now();
+      parsedDate = DateTime.tryParse(rawDate.toString())?.toLocal() ?? DateTime.now();
     }
     return ExpenseModel(
       id: json['_id'] ?? json['id'] ?? '',

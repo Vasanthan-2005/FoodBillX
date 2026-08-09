@@ -37,10 +37,10 @@ class CustomerModel {
       totalSpent: (json['totalSpent'] as num?)?.toDouble() ?? 0.0,
       loyaltyPoints: (json['loyaltyPoints'] as num?)?.toInt() ?? 0,
       createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'].toString())
+          ? DateTime.tryParse(json['createdAt'].toString())?.toLocal()
           : null,
       updatedAt: json['updatedAt'] != null
-          ? DateTime.tryParse(json['updatedAt'].toString())
+          ? DateTime.tryParse(json['updatedAt'].toString())?.toLocal()
           : null,
     );
   }
