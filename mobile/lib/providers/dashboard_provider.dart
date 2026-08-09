@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
-import '../api/local_cache_service.dart';
 
 class DashboardState {
   final double todayRevenue;
@@ -146,34 +145,10 @@ class DashboardState {
 
 class DashboardNotifier extends StateNotifier<DashboardState> {
   final ApiClient _apiClient;
-  static const String _cacheKey = 'dashboard_summary';
 
-  DashboardNotifier(this._apiClient)
-    : super(DashboardState()) {
-    refresh(forceSpinner: true);
-  }
+  DashboardNotifier(this._apiClient) : super(DashboardState());
 
-  Future<void> refresh({bool forceSpinner = false}) async {
-    final showLoading = forceSpinner || (state.recentDailyRevenue.isEmpty && state.todayRevenue == 0);
-    state = state.copyWith(isLoading: showLoading, errorMessage: null);
-
-    dynamic data;
-    try {
-      final response = await _apiClient.dio.get('/reports/dashboard');
-      data = response.data;
-      await LocalCacheService.saveCache(_cacheKey, data);
-    } catch (_) {
-      data = await LocalCacheService.getCache(_cacheKey);
-    }
-
-    Map<String, dynamic> summary = {};
-    if (data is Map && data.containsKey('data')) {
-      final d = data['data'];
-      if (d is Map && d.containsKey('summary')) {
-        summary = Map<String, dynamic>.from(d['summary']);
-      }
-    }
-
+  void populateFromData(Map<String, dynamic> summary) {
     final todayRevenue = (summary['todayRevenue'] as num?)?.toDouble() ?? 0.0;
     final todayOrderCount = (summary['todayOrderCount'] as num?)?.toInt() ?? 0;
     final todayExpenseTotal = (summary['todayExpenseTotal'] as num?)?.toDouble() ?? 0.0;
@@ -259,6 +234,29 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       isLoading: false,
       errorMessage: null,
     );
+  }
+
+  Future<void> refresh({bool forceSpinner = false}) async {
+    final showLoading = forceSpinner || (state.recentDailyRevenue.isEmpty && state.todayRevenue == 0);
+    state = state.copyWith(isLoading: showLoading, errorMessage: null);
+
+    try {
+      final response = await _apiClient.dio.get('/reports/dashboard');
+      final data = response.data;
+      Map<String, dynamic> summary = {};
+      if (data is Map && data.containsKey('data')) {
+        final d = data['data'];
+        if (d is Map && d.containsKey('summary')) {
+          summary = Map<String, dynamic>.from(d['summary']);
+        }
+      }
+      populateFromData(summary);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: e.toString().replaceAll('Exception: ', ''),
+      );
+    }
   }
 }
 

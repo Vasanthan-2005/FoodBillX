@@ -192,6 +192,7 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'expense_fab',
         onPressed: () => _showAddEditExpenseDialog(),
         backgroundColor: Colors.red.shade700,
         icon: const Icon(Icons.add_rounded, color: Colors.white),

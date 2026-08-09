@@ -1,27 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../api/api_response_parser.dart';
-import '../api/local_cache_service.dart';
 import '../core/constants/api_endpoints.dart';
 import '../models/category_model.dart';
 
 class CategoryRepository {
   final ApiClient _apiClient;
-  static const String _cacheKey = 'categories';
 
   CategoryRepository(this._apiClient);
 
   Future<List<CategoryModel>> getAll() async {
-    dynamic data;
-    try {
-      final response = await _apiClient.dio.get(ApiEndpoints.categories);
-      data = response.data;
-      await LocalCacheService.saveCache(_cacheKey, data);
-    } catch (_) {
-      data = await LocalCacheService.getCache(_cacheKey);
-    }
-
-    final rawList = ApiResponseParser.extractList(data, ['categories']);
+    final response = await _apiClient.dio.get(ApiEndpoints.categories);
+    final rawList = ApiResponseParser.extractList(response.data, ['categories']);
     return rawList
         .map((item) => CategoryModel.fromJson(Map<String, dynamic>.from(item)))
         .toList();

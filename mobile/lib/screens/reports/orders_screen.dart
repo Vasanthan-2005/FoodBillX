@@ -10,6 +10,7 @@ import '../../core/utils/snackbar_utils.dart';
 import '../../core/widgets/empty_state_widget.dart';
 import '../../core/widgets/error_state_widget.dart';
 import '../../core/widgets/skeleton_loader.dart';
+import '../../models/order_model.dart';
 import '../../providers/orders_provider.dart';
 import '../../providers/settings_provider.dart';
 
@@ -355,43 +356,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             ),
-                            onPressed: () async {
-                              final settings = ref.read(settingsProvider).settings;
-                              try {
-                                final file = await PdfInvoiceHelper.generateInvoicePdf(
-                                  businessName: settings?.businessName ?? 'HMB Bills',
-                                  businessPhone: settings?.phone ?? '',
-                                  businessAddress: settings?.address ?? '',
-                                  gstin: settings?.gstin ?? '',
-                                  invoicePrefix: settings?.invoicePrefix ?? 'INV-',
-                                  orderNumber: order.orderNumber,
-                                  orderDate: order.createdAt,
-                                  customerName: order.customerName,
-                                  customerPhone: order.customerPhone,
-                                  loyaltyCardNumber: order.loyaltyCardNumber,
-                                  visitCount: order.visitCount,
-                                  rewardStatus: order.rewardStatus,
-                                  items: order.items.map((i) => {
-                                        'name': i.name,
-                                        'price': i.price,
-                                        'quantity': i.quantity,
-                                        'subtotal': i.subtotal,
-                                      }).toList(),
-                                  subtotal: order.subtotal,
-                                  discount: order.discountAmount,
-                                  gstAmount: order.gstAmount,
-                                  serviceChargeAmount: order.serviceChargeAmount,
-                                  grandTotal: order.grandTotal,
-                                  paymentMethod: order.paymentMethod,
-                                );
-                                await PdfInvoiceHelper.shareInvoiceViaWhatsApp(file, order.customerPhone, order.orderNumber);
-                              } catch (e) {
-                                if (mounted) {
-                                  SnackbarUtils.showError(context, 'Failed to generate PDF bill');
-                                }
-                              }
-                            },
-                            icon: const Icon(Icons.receipt, size: 16),
+                            onPressed: () => _showOrderBillDialog(context, order),
+                            icon: const Icon(Icons.receipt_long_rounded, size: 16),
                             label: const Text('View Bill', style: TextStyle(fontSize: 12)),
                           ),
                         ],
@@ -404,6 +370,241 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           ).animate().fadeIn(delay: (index * 20).ms);
         },
       ),
+    );
+  }
+
+  void _showOrderBillDialog(BuildContext context, OrderModel order) {
+    final settings = ref.read(settingsProvider).settings;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          contentPadding: const EdgeInsets.all(20),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Receipt Header Card
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withAlpha(20),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.primary.withAlpha(60)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.restaurant_rounded, color: AppColors.primary, size: 36),
+                        const SizedBox(height: 6),
+                        Text(
+                          settings?.businessName ?? 'HMB Bills',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                        ),
+                        if ((settings?.address ?? '').isNotEmpty)
+                          Text(
+                            settings!.address,
+                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                        if ((settings?.phone ?? '').isNotEmpty)
+                          Text(
+                            'Ph: ${settings!.phone}',
+                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Bill Meta Info
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            order.orderNumber,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          Text(
+                            DateFormat('d MMM yyyy, h:mm a').format(order.createdAt),
+                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withAlpha(25),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          order.paymentMethod.toUpperCase(),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Customer Details Card
+                  if (order.customerName.isNotEmpty && order.customerName != 'Walk-in Customer') ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : AppColors.lightBackground,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Customer: ${order.customerName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          if (order.customerPhone.isNotEmpty)
+                            Text('Phone: ${order.customerPhone}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+
+                  // Itemized Receipt Table
+                  const Text('Items Billed:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  ...order.items.map((item) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${item.name} x${item.quantity}',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          Text(
+                            CurrencyFormatter.format(item.subtotal),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+
+                  const Divider(height: 20),
+
+                  // Financial Breakdown
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Subtotal:'),
+                      Text(CurrencyFormatter.format(order.subtotal)),
+                    ],
+                  ),
+                  if (order.discountAmount > 0) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Discount:'),
+                        Text('- ${CurrencyFormatter.format(order.discountAmount)}', style: const TextStyle(color: Colors.green)),
+                      ],
+                    ),
+                  ],
+                  if (order.gstAmount > 0) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('GST Tax:'),
+                        Text(CurrencyFormatter.format(order.gstAmount)),
+                      ],
+                    ),
+                  ],
+                  const Divider(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Grand Total:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text(
+                        CurrencyFormatter.format(order.grandTotal),
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+              onPressed: () async {
+                try {
+                  final file = await PdfInvoiceHelper.generateInvoicePdf(
+                    businessName: settings?.businessName ?? 'HMB Bills',
+                    businessPhone: settings?.phone ?? '',
+                    businessAddress: settings?.address ?? '',
+                    gstin: settings?.gstin ?? '',
+                    invoicePrefix: settings?.invoicePrefix ?? 'INV-',
+                    orderNumber: order.orderNumber,
+                    orderDate: order.createdAt,
+                    customerName: order.customerName,
+                    customerPhone: order.customerPhone,
+                    loyaltyCardNumber: order.loyaltyCardNumber,
+                    visitCount: order.visitCount,
+                    rewardStatus: order.rewardStatus,
+                    items: order.items.map((i) => {
+                          'name': i.name,
+                          'price': i.price,
+                          'quantity': i.quantity,
+                          'subtotal': i.subtotal,
+                        }).toList(),
+                    subtotal: order.subtotal,
+                    discount: order.discountAmount,
+                    gstAmount: order.gstAmount,
+                    serviceChargeAmount: order.serviceChargeAmount,
+                    grandTotal: order.grandTotal,
+                    paymentMethod: order.paymentMethod,
+                  );
+                  await PdfInvoiceHelper.shareInvoiceViaWhatsApp(file, order.customerPhone, order.orderNumber);
+                } catch (_) {
+                  if (ctx.mounted) {
+                    SnackbarUtils.showError(ctx, 'Failed to share PDF bill');
+                  }
+                }
+              },
+              icon: const Icon(Icons.share_rounded, color: Colors.white, size: 16),
+              label: const Text('Share PDF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
     );
   }
 }

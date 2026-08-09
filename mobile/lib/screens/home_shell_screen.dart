@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/realtime_sync_service.dart';
 import '../core/constants/app_colors.dart';
 import '../core/widgets/onboarding_dialog.dart';
 import 'billing/billing_screen.dart';
@@ -29,7 +30,9 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
     _pages = List<Widget?>.filled(5, null);
     _pages[0] = _buildPage(0);
 
+    // Initialize and keep the realtime sync service alive for the app session
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(realtimeSyncProvider); // Ensures socket + polling starts
       OnboardingDialog.showIfNeeded(context);
     });
   }
@@ -148,6 +151,7 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
     ];
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: IndexedStack(index: _currentIndex, children: screens),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

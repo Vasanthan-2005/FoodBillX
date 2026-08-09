@@ -29,6 +29,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     loadSettings();
   }
 
+  void updateFromBootstrap(BusinessSettingsModel settings) {
+    state = state.copyWith(settings: settings, isLoading: false, errorMessage: null);
+  }
+
   Future<void> loadSettings() async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {

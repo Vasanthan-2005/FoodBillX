@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/snackbar_utils.dart';
@@ -9,7 +9,9 @@ import '../../core/widgets/empty_state_widget.dart';
 import '../../models/menu_item_model.dart';
 import '../../providers/menu_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../repositories/upload_repository.dart';
 import '../../core/utils/image_picker_service.dart';
+import '../../core/widgets/dish_card_widget.dart';
 import '../../core/widgets/dish_image_widget.dart';
 
 class MenuManagementScreen extends ConsumerStatefulWidget {
@@ -22,23 +24,7 @@ class MenuManagementScreen extends ConsumerStatefulWidget {
 }
 
 class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
-  final _searchController = TextEditingController();
-  Timer? _searchDebounceTimer;
   bool _isGridView = false;
-
-  void _onSearchQueryChanged(String val) {
-    _searchDebounceTimer?.cancel();
-    _searchDebounceTimer = Timer(const Duration(milliseconds: 250), () {
-      ref.read(menuProvider.notifier).setSearchQuery(val);
-    });
-  }
-
-  @override
-  void dispose() {
-    _searchDebounceTimer?.cancel();
-    _searchController.dispose();
-    super.dispose();
-  }
 
   // ── Category Management ──────────────────────────────────────────
   void _showCategoryManagerSheet() {
@@ -325,6 +311,19 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                 if (!formKey.currentState!.validate()) return;
                                 setModalState(() => isSaving = true);
 
+                                String finalImageUrl = selectedImage.trim();
+
+                                // 1. Upload local image to backend if a new photo was picked
+                                if (finalImageUrl.isNotEmpty &&
+                                    File(finalImageUrl).existsSync()) {
+                                  final uploadedUrl = await ref
+                                      .read(uploadRepositoryProvider)
+                                      .uploadDishImage(File(finalImageUrl));
+                                  if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+                                    finalImageUrl = uploadedUrl;
+                                  }
+                                }
+
                                 final gstVal =
                                     double.tryParse(gstController.text.trim()) ??
                                     defaultGst;
@@ -340,7 +339,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                       ) ??
                                       0.0,
                                   gstPercentage: gstVal,
-                                  image: selectedImage.trim(),
+                                  image: finalImageUrl,
                                   isVeg: isVeg,
                                   isAvailable: existingItem?.isAvailable ?? true,
                                 );
@@ -355,6 +354,15 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                     ok = await ref
                                         .read(menuProvider.notifier)
                                         .updateMenuItem(item);
+
+                                    // Clean up old cloud image if photo was changed
+                                    if (ok &&
+                                        existingItem.image.isNotEmpty &&
+                                        existingItem.image != finalImageUrl) {
+                                      await ref
+                                          .read(uploadRepositoryProvider)
+                                          .deleteDishImage(existingItem.image);
+                                    }
                                   }
                                 } catch (_) {
                                   ok = false;
@@ -419,6 +427,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
     final state = ref.watch(menuProvider);
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('Menu Management'),
         actions: [
@@ -444,6 +453,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'menu_fab',
         onPressed: () => _showItemFormDialog(),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text(
@@ -455,25 +465,11 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchQueryChanged,
-              decoration: InputDecoration(
-                hintText: 'Search menu items...',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear_rounded),
-                        onPressed: () {
-                          _searchController.clear();
-                          _onSearchQueryChanged('');
-                        },
-                      )
-                    : null,
-              ),
-            ),
+          _MenuSearchBar(
+            initialQuery: state.searchQuery,
+            onChanged: (val) {
+              ref.read(menuProvider.notifier).setSearchQuery(val);
+            },
           ),
 
           // Category Filter Chips
@@ -547,78 +543,17 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 1.1,
+        childAspectRatio: 0.9,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
       itemCount: state.items.length,
       itemBuilder: (ctx, index) {
         final item = state.items[index];
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: item.isVeg
-                              ? AppColors.vegGreen
-                              : AppColors.nonVegRed,
-                        ),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Icon(
-                        Icons.circle,
-                        size: 8,
-                        color: item.isVeg
-                            ? AppColors.vegGreen
-                            : AppColors.nonVegRed,
-                      ),
-                    ),
-                    Switch(
-                      value: item.isAvailable,
-                      activeThumbColor: AppColors.secondary,
-                      onChanged: (_) {
-                        ref
-                            .read(menuProvider.notifier)
-                            .toggleAvailability(item.id);
-                      },
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                Text(
-                  item.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      CurrencyFormatter.format(item.price),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    _ItemPopupMenu(item: item, onEdit: _showItemFormDialog),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        return DishCardWidget(
+          item: item,
+          onAddToCart: () => _showItemFormDialog(item),
+          trailingAction: _ItemPopupMenu(item: item, onEdit: _showItemFormDialog),
         );
       },
     );
@@ -630,88 +565,90 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
       itemCount: state.items.length,
       itemBuilder: (ctx, index) {
         final item = state.items[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(14.0),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    border: Border.all(
+        return RepaintBoundary(
+          child: Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(14.0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: item.isVeg
+                            ? AppColors.vegGreen
+                            : AppColors.nonVegRed,
+                        width: 1.5,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Icon(
+                      Icons.circle,
+                      size: 10,
                       color: item.isVeg
                           ? AppColors.vegGreen
                           : AppColors.nonVegRed,
-                      width: 1.5,
                     ),
-                    borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Icon(
-                    Icons.circle,
-                    size: 10,
-                    color: item.isVeg
-                        ? AppColors.vegGreen
-                        : AppColors.nonVegRed,
+                  const SizedBox(width: 10),
+                  DishImageWidget(
+                    imageUrl: item.image,
+                    fallbackEmoji: item.isVeg ? '🥗' : '🍗',
+                    size: 40,
+                    borderRadius: 10,
                   ),
-                ),
-                const SizedBox(width: 10),
-                DishImageWidget(
-                  imageUrl: item.image,
-                  fallbackEmoji: item.isVeg ? '🥗' : '🍗',
-                  size: 40,
-                  borderRadius: 10,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
+                        const SizedBox(height: 4),
+                        Text(
+                          CurrencyFormatter.format(item.price),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    children: [
+                      Switch(
+                        value: item.isAvailable,
+                        activeThumbColor: AppColors.secondary,
+                        onChanged: (_) => ref
+                            .read(menuProvider.notifier)
+                            .toggleAvailability(item.id),
                       ),
-                      const SizedBox(height: 4),
                       Text(
-                        CurrencyFormatter.format(item.price),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.primary,
+                        item.isAvailable ? 'In Stock' : 'Out',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: item.isAvailable
+                              ? AppColors.secondary
+                              : Colors.red,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
-                ),
-                Column(
-                  children: [
-                    Switch(
-                      value: item.isAvailable,
-                      activeThumbColor: AppColors.secondary,
-                      onChanged: (_) => ref
-                          .read(menuProvider.notifier)
-                          .toggleAvailability(item.id),
-                    ),
-                    Text(
-                      item.isAvailable ? 'In Stock' : 'Out',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: item.isAvailable
-                            ? AppColors.secondary
-                            : Colors.red,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                _ItemPopupMenu(item: item, onEdit: _showItemFormDialog),
-              ],
+                  _ItemPopupMenu(item: item, onEdit: _showItemFormDialog),
+                ],
+              ),
             ),
           ),
-        ).animate().fadeIn(delay: (index * 30).ms);
+        );
       },
     );
   }
@@ -989,6 +926,76 @@ class _CategoryManagerSheetState extends ConsumerState<_CategoryManagerSheet> {
                 ),
         ),
       ],
+    );
+  }
+}
+
+// ─── Isolated Menu Search Bar ────────────────────────────────────────────────
+// Holds its own TextEditingController + 280ms debounce so typing does NOT
+// cause parent screen re-renders or frame drops on every keystroke.
+class _MenuSearchBar extends StatefulWidget {
+  final String initialQuery;
+  final ValueChanged<String> onChanged;
+
+  const _MenuSearchBar({
+    required this.initialQuery,
+    required this.onChanged,
+  });
+
+  @override
+  State<_MenuSearchBar> createState() => _MenuSearchBarState();
+}
+
+class _MenuSearchBarState extends State<_MenuSearchBar> {
+  late final TextEditingController _controller;
+  static const Duration _debounce = Duration(milliseconds: 280);
+  DateTime? _lastChanged;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialQuery);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String val) {
+    final now = DateTime.now();
+    _lastChanged = now;
+    Future.delayed(_debounce, () {
+      if (_lastChanged == now && mounted) {
+        widget.onChanged(val.trim());
+      }
+    });
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      child: TextField(
+        controller: _controller,
+        onChanged: _onChanged,
+        decoration: InputDecoration(
+          hintText: 'Search menu items...',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: _controller.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear_rounded),
+                  onPressed: () {
+                    _controller.clear();
+                    widget.onChanged('');
+                    setState(() {});
+                  },
+                )
+              : null,
+        ),
+      ),
     );
   }
 }

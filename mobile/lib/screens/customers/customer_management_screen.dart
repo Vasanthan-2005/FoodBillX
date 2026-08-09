@@ -254,6 +254,7 @@ class _CustomerManagementScreenState
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'customer_fab',
         onPressed: () => _showCustomerFormDialog(),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.person_add_rounded, color: Colors.white),

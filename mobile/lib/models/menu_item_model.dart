@@ -25,6 +25,34 @@ class MenuItemModel {
     required this.isAvailable,
   });
 
+  MenuItemModel copyWith({
+    String? id,
+    String? categoryId,
+    String? categoryName,
+    String? name,
+    String? description,
+    double? price,
+    double? discount,
+    double? gstPercentage,
+    String? image,
+    bool? isVeg,
+    bool? isAvailable,
+  }) {
+    return MenuItemModel(
+      id: id ?? this.id,
+      categoryId: categoryId ?? this.categoryId,
+      categoryName: categoryName ?? this.categoryName,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      price: price ?? this.price,
+      discount: discount ?? this.discount,
+      gstPercentage: gstPercentage ?? this.gstPercentage,
+      image: image ?? this.image,
+      isVeg: isVeg ?? this.isVeg,
+      isAvailable: isAvailable ?? this.isAvailable,
+    );
+  }
+
   factory MenuItemModel.fromJson(Map<String, dynamic> json) {
     String catId = '';
     String? catName;

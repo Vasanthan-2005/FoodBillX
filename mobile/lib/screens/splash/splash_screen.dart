@@ -4,13 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_colors.dart';
-import '../../providers/customer_provider.dart';
-import '../../providers/dashboard_provider.dart';
-import '../../providers/expense_provider.dart';
-import '../../providers/menu_provider.dart';
-import '../../providers/orders_provider.dart';
+import '../../providers/bootstrap_provider.dart';
 import '../../providers/pin_auth_provider.dart';
-import '../../providers/settings_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -23,39 +18,35 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _startInitialization();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startInitialization();
+    });
   }
 
   Future<void> _startInitialization() async {
     final startTime = DateTime.now();
 
-    // Perform startup prefetch of required app data in parallel
-    try {
-      await Future.wait([
-        ref.read(menuProvider.notifier).loadCategoriesAndItems(),
-        ref.read(customerProvider.notifier).loadCustomers(),
-        ref.read(settingsProvider.notifier).loadSettings(),
-        ref.read(dashboardProvider.notifier).refresh(forceSpinner: true),
-        ref.read(expenseProvider.notifier).loadAll(),
-        ref.read(ordersProvider.notifier).loadOrders(),
-      ]);
-    } catch (_) {
-      // Ignore initial network issues, local cache fallbacks exist
-    }
+    // Trigger central bootstrap data fetch from backend
+    final success =
+        await ref.read(bootstrapProvider.notifier).loadBootstrap();
 
-    // Ensure minimum splash duration of 4 seconds (4000 ms)
+    // Ensure smooth visual transition (minimum 1200ms)
     final elapsed = DateTime.now().difference(startTime).inMilliseconds;
-    if (elapsed < 4000) {
-      await Future.delayed(Duration(milliseconds: 4000 - elapsed));
+    if (elapsed < 1200) {
+      await Future.delayed(Duration(milliseconds: 1200 - elapsed));
     }
 
     if (!mounted) return;
 
-    final pinState = ref.read(pinAuthProvider);
-    if (pinState.mode == PinFlowMode.unlocked) {
-      context.go('/home');
+    if (success) {
+      final pinState = ref.read(pinAuthProvider);
+      if (pinState.mode == PinFlowMode.unlocked) {
+        context.go('/home');
+      } else {
+        context.go('/pin');
+      }
     } else {
-      context.go('/pin');
+      context.go('/network-error');
     }
   }
 
@@ -127,18 +118,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               ),
             ),
 
-            // Bottom Footer
+            // Bottom Loading Indicator & Status Message
             Positioned(
-              bottom: 32,
+              bottom: 40,
               left: 0,
               right: 0,
               child: Column(
                 children: [
                   const SizedBox(
-                    width: 24,
-                    height: 24,
+                    width: 28,
+                    height: 28,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
+                      strokeWidth: 2.8,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         AppColors.primary,
                       ),
@@ -146,11 +137,21 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Powered by FoodBillX',
+                    'Preparing your dashboard...',
                     style: TextStyle(
                       fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade300,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Powered by FoodBillX',
+                    style: TextStyle(
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade400,
+                      color: Colors.grey.shade500,
                       letterSpacing: 0.9,
                     ),
                   ),

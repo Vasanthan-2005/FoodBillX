@@ -91,6 +91,15 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     }
   }
 
+  void updateFromBootstrap(List<OrderModel> orders) {
+    state = state.copyWith(
+      orders: orders,
+      totalCount: orders.length,
+      isLoading: false,
+      errorMessage: null,
+    );
+  }
+
   Future<void> loadOrders({
     OrderDateFilter? dateFilter,
     DateTimeRange? customRange,

@@ -54,15 +54,15 @@ class ReportService {
     // --- EXPENSES ---
     const [todayExp, weekExp, monthExp, overallExp] = await Promise.all([
       Expense.aggregate([
-        { $match: { date: { $gte: startOfDay, $lte: endOfDay } } },
+        { $match: { $or: [{ date: { $gte: startOfDay, $lte: endOfDay } }, { createdAt: { $gte: startOfDay, $lte: endOfDay } }] } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       Expense.aggregate([
-        { $match: { date: { $gte: startOfWeek, $lte: endOfDay } } },
+        { $match: { $or: [{ date: { $gte: startOfWeek, $lte: endOfDay } }, { createdAt: { $gte: startOfWeek, $lte: endOfDay } }] } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       Expense.aggregate([
-        { $match: { date: { $gte: startOfMonth, $lte: endOfDay } } },
+        { $match: { $or: [{ date: { $gte: startOfMonth, $lte: endOfDay } }, { createdAt: { $gte: startOfMonth, $lte: endOfDay } }] } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       Expense.aggregate([
@@ -182,11 +182,14 @@ class ReportService {
       hourlyRevenueToday.push(slotOrder[0]?.total || 0.0);
     }
 
-    // --- DAILY SALES TREND (LAST 7 DAYS) ---
+    // --- DAILY SALES TREND (CURRENT WEEK: SUN -> SAT) ---
     const recentDailyRevenue = [];
-    for (let i = 6; i >= 0; i--) {
-      const dayStart = new Date(startOfDay);
-      dayStart.setDate(dayStart.getDate() - i);
+    const sunOfWeek = new Date(startOfDay);
+    sunOfWeek.setDate(sunOfWeek.getDate() - sunOfWeek.getDay()); // Sunday of current week
+
+    for (let i = 0; i < 7; i++) {
+      const dayStart = new Date(sunOfWeek);
+      dayStart.setDate(dayStart.getDate() + i);
       const dayEnd = new Date(dayStart);
       dayEnd.setHours(23, 59, 59, 999);
 
@@ -290,6 +293,252 @@ class ReportService {
       monthlyWeeklyRevenue,
     };
   }
+
+  async getFilteredAnalytics(query = {}) {
+    const { period = 'today', startDate, endDate } = query;
+    const now = new Date();
+    let start, end, prevStart, prevEnd;
+
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+    const endOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
+    if (period === 'today') {
+      start = startOfDay(now);
+      end = endOfDay(now);
+      prevStart = new Date(start);
+      prevStart.setDate(prevStart.getDate() - 1);
+      prevEnd = new Date(end);
+      prevEnd.setDate(prevEnd.getDate() - 1);
+    } else if (period === 'yesterday') {
+      const yest = new Date(now);
+      yest.setDate(yest.getDate() - 1);
+      start = startOfDay(yest);
+      end = endOfDay(yest);
+      prevStart = new Date(start);
+      prevStart.setDate(prevStart.getDate() - 1);
+      prevEnd = new Date(end);
+      prevEnd.setDate(prevEnd.getDate() - 1);
+    } else if (period === 'last7') {
+      end = endOfDay(now);
+      start = new Date(startOfDay(now));
+      start.setDate(start.getDate() - 6);
+      prevEnd = new Date(start);
+      prevEnd.setMilliseconds(-1);
+      prevStart = new Date(prevEnd);
+      prevStart.setDate(prevStart.getDate() - 6);
+    } else if (period === 'last30') {
+      end = endOfDay(now);
+      start = new Date(startOfDay(now));
+      start.setDate(start.getDate() - 29);
+      prevEnd = new Date(start);
+      prevEnd.setMilliseconds(-1);
+      prevStart = new Date(prevEnd);
+      prevStart.setDate(prevStart.getDate() - 29);
+    } else if (period === 'thisMonth') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      end = endOfDay(now);
+      prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      prevEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    } else if (period === 'lastMonth') {
+      start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      prevStart = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0);
+      prevEnd = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59, 999);
+    } else if (period === 'custom' && startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+      const diffMs = end.getTime() - start.getTime();
+      prevEnd = new Date(start.getTime() - 1);
+      prevStart = new Date(prevEnd.getTime() - diffMs);
+    } else {
+      start = startOfDay(now);
+      end = endOfDay(now);
+      prevStart = new Date(start);
+      prevStart.setDate(prevStart.getDate() - 1);
+      prevEnd = new Date(end);
+      prevEnd.setDate(prevEnd.getDate() - 1);
+    }
+
+    const validOrderMatch = { orderStatus: { $ne: 'refunded' }, createdAt: { $gte: start, $lte: end } };
+    const prevOrderMatch = { orderStatus: { $ne: 'refunded' }, createdAt: { $gte: prevStart, $lte: prevEnd } };
+
+    const [
+      currOrdersAgg,
+      prevOrdersAgg,
+      cancelledCount,
+      expensesAgg,
+      paymentAgg,
+      topItemsAgg,
+      categoryAgg,
+      recentOrders,
+      totalCustCount,
+      returningCustCount,
+      topSpenderAgg,
+      mostFreqAgg
+    ] = await Promise.all([
+      Order.aggregate([
+        { $match: validOrderMatch },
+        { $group: { _id: null, totalRevenue: { $sum: '$grandTotal' }, count: { $sum: 1 }, totalGst: { $sum: '$gstAmount' }, totalDiscount: { $sum: '$discountAmount' } } },
+      ]),
+      Order.aggregate([
+        { $match: prevOrderMatch },
+        { $group: { _id: null, totalRevenue: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+      ]),
+      Order.countDocuments({ orderStatus: 'refunded', createdAt: { $gte: start, $lte: end } }),
+      Expense.aggregate([
+        { $match: { $or: [{ date: { $gte: start, $lte: end } }, { createdAt: { $gte: start, $lte: end } }] } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      Order.aggregate([
+        { $match: validOrderMatch },
+        { $group: { _id: '$paymentMethod', total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+      ]),
+      Order.aggregate([
+        { $match: validOrderMatch },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: '$items.name',
+            qtySold: { $sum: '$items.quantity' },
+            revenue: { $sum: '$items.subtotal' },
+            category: { $first: '$items.category' }
+          }
+        },
+        { $sort: { qtySold: -1 } },
+        { $limit: 10 }
+      ]),
+      Order.aggregate([
+        { $match: validOrderMatch },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: { $ifNull: ['$items.category', 'General'] },
+            revenue: { $sum: '$items.subtotal' },
+            ordersCount: { $sum: 1 }
+          }
+        },
+        { $sort: { revenue: -1 } }
+      ]),
+      Order.find({ createdAt: { $gte: start, $lte: end } }).sort({ createdAt: -1 }).limit(15),
+      Customer.countDocuments(),
+      Customer.countDocuments({ totalVisits: { $gt: 1 } }),
+      Customer.find().sort({ totalSpent: -1 }).limit(1),
+      Customer.find().sort({ totalVisits: -1 }).limit(1)
+    ]);
+
+    const revenue = currOrdersAgg[0]?.totalRevenue || 0;
+    const ordersCount = currOrdersAgg[0]?.count || 0;
+    const prevRevenue = prevOrdersAgg[0]?.totalRevenue || 0;
+    const prevOrdersCount = prevOrdersAgg[0]?.count || 0;
+
+    const totalExpenses = expensesAgg[0]?.total || 0;
+    const netProfit = revenue - totalExpenses;
+    const aov = ordersCount > 0 ? Math.round(revenue / ordersCount) : 0;
+    const profitMargin = revenue > 0 ? Math.round((netProfit / revenue) * 100) : 0;
+    const revenueGrowth = prevRevenue > 0 ? parseFloat((((revenue - prevRevenue) / prevRevenue) * 100).toFixed(1)) : 0;
+    const returningPercent = totalCustCount > 0 ? Math.round((returningCustCount / totalCustCount) * 100) : 0;
+
+    // --- HOURLY BREAKDOWN (0 - 23) ---
+    const hourlyData = Array.from({ length: 24 }, (_, h) => {
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const displayHour = h % 12 === 0 ? 12 : h % 12;
+      return { hour: `${displayHour} ${ampm}`, hourNum: h, revenue: 0, count: 0 };
+    });
+
+    const hourlyAgg = await Order.aggregate([
+      { $match: validOrderMatch },
+      { $project: { hour: { $hour: '$createdAt' }, grandTotal: 1 } },
+      { $group: { _id: '$hour', total: { $sum: '$grandTotal' }, count: { $sum: 1 } } }
+    ]);
+
+    hourlyAgg.forEach(item => {
+      if (item._id >= 0 && item._id < 24) {
+        hourlyData[item._id].revenue = item.total;
+        hourlyData[item._id].count = item.count;
+      }
+    });
+
+    // --- DAILY TREND WITHIN PERIOD ---
+    const dailyTrend = [];
+    const stepDays = 1;
+    const curr = new Date(start);
+    while (curr <= end) {
+      const dStart = startOfDay(curr);
+      const dEnd = endOfDay(curr);
+      const dRevAgg = await Order.aggregate([
+        { $match: { orderStatus: { $ne: 'refunded' }, createdAt: { $gte: dStart, $lte: dEnd } } },
+        { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } }
+      ]);
+      const dExpAgg = await Expense.aggregate([
+        { $match: { $or: [{ date: { $gte: dStart, $lte: dEnd } }, { createdAt: { $gte: dStart, $lte: dEnd } }] } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]);
+
+      const dRev = dRevAgg[0]?.total || 0;
+      const dCnt = dRevAgg[0]?.count || 0;
+      const dExp = dExpAgg[0]?.total || 0;
+      const dProf = dRev - dExp;
+
+      const dateLabel = curr.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
+      dailyTrend.push({
+        date: curr.toISOString().split('T')[0],
+        label: dateLabel,
+        revenue: dRev,
+        orders: dCnt,
+        profit: dProf,
+        expenses: dExp
+      });
+
+      curr.setDate(curr.getDate() + stepDays);
+    }
+
+    // Format Payment Breakdown
+    const paymentBreakdown = { cash: 0, upi: 0, card: 0, wallet: 0 };
+    paymentAgg.forEach(p => {
+      const method = (p._id || 'cash').toLowerCase();
+      paymentBreakdown[method] = p.total;
+    });
+
+    return {
+      kpis: {
+        revenue,
+        ordersCount,
+        aov,
+        netProfit,
+        totalExpenses,
+        profitMargin,
+        revenueGrowth,
+        returningPercent,
+        cancelledCount,
+        totalCustomers: totalCustCount
+      },
+      dailyTrend,
+      hourlyData: hourlyData.filter(h => h.hourNum >= 8 && h.hourNum <= 23), // 8 AM to 11 PM
+      paymentBreakdown,
+      topSellingItems: topItemsAgg.map(i => ({
+        name: i._id,
+        category: i.category || 'General',
+        qtySold: i.qtySold,
+        revenue: i.revenue,
+        profit: Math.round(i.revenue * 0.45) // Estimated profit margin per dish item
+      })),
+      categoryPerformance: categoryAgg.map(c => ({
+        category: c._id,
+        revenue: c.revenue,
+        ordersCount: c.ordersCount
+      })),
+      customerInsights: {
+        totalCustomers: totalCustCount,
+        newCustomers: Math.max(0, totalCustCount - returningCustCount),
+        returningCustomers: returningCustCount,
+        returningPercent,
+        highestSpender: topSpenderAgg[0] ? { name: topSpenderAgg[0].name, amount: topSpenderAgg[0].totalSpent || 0 } : null,
+        mostFrequent: mostFreqAgg[0] ? { name: mostFreqAgg[0].name, visits: mostFreqAgg[0].totalVisits || 0 } : null
+      },
+      recentOrders
+    };
+  }
 }
 
 module.exports = new ReportService();
+

@@ -42,11 +42,7 @@ class HomeDashboardScreen extends ConsumerWidget {
 
     final customerCount = customerState.customers.length;
 
-    final today = DateTime.now();
-    final xLabels = List.generate(7, (i) {
-      final d = today.subtract(Duration(days: 6 - i));
-      return DateFormat('EEE').format(d);
-    });
+    const xLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     final last7Total = metrics.recentDailyRevenue.fold<double>(0.0, (s, e) => s + e);
     final display7Total = last7Total > 0 ? last7Total : metrics.weekRevenue;
@@ -65,11 +61,15 @@ class HomeDashboardScreen extends ConsumerWidget {
                   size: 22,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  settings?.businessName ?? 'HMB Bills',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Text(
+                    settings?.businessName ?? 'HMB Bills',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -78,7 +78,7 @@ class HomeDashboardScreen extends ConsumerWidget {
             Text(
               formattedDate,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 color: isDark
                     ? AppColors.darkTextSecondary
                     : AppColors.lightTextSecondary,

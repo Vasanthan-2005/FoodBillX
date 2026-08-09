@@ -1,13 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../api/api_response_parser.dart';
-import '../api/local_cache_service.dart';
 import '../core/constants/api_endpoints.dart';
 import '../models/order_model.dart';
 
 class OrderRepository {
   final ApiClient _apiClient;
-  static const String _cacheKey = 'orders';
 
   OrderRepository(this._apiClient);
 
@@ -36,23 +34,12 @@ class OrderRepository {
       queryParams['endDate'] = endDate.toIso8601String();
     }
 
-    dynamic data;
-    try {
-      final response = await _apiClient.dio.get(
-        ApiEndpoints.orders,
-        queryParameters: queryParams,
-      );
-      data = response.data;
-      if (startDate == null && endDate == null && paymentMethod == null) {
-        await LocalCacheService.saveCache(_cacheKey, data);
-      }
-    } catch (_) {
-      if (startDate == null && endDate == null && paymentMethod == null) {
-        data = await LocalCacheService.getCache(_cacheKey);
-      }
-    }
+    final response = await _apiClient.dio.get(
+      ApiEndpoints.orders,
+      queryParameters: queryParams,
+    );
 
-    final rawList = ApiResponseParser.extractList(data, ['orders']);
+    final rawList = ApiResponseParser.extractList(response.data, ['orders']);
     return rawList
         .map((item) => OrderModel.fromJson(Map<String, dynamic>.from(item)))
         .toList();

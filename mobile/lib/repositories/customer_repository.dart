@@ -1,13 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../api/api_response_parser.dart';
-import '../api/local_cache_service.dart';
 import '../core/constants/api_endpoints.dart';
 import '../models/customer_model.dart';
 
 class CustomerRepository {
   final ApiClient _apiClient;
-  static const String _cacheKey = 'customers';
 
   CustomerRepository(this._apiClient);
 
@@ -25,23 +23,12 @@ class CustomerRepository {
       queryParams['phone'] = phone;
     }
 
-    dynamic data;
-    try {
-      final response = await _apiClient.dio.get(
-        ApiEndpoints.customers,
-        queryParameters: queryParams,
-      );
-      data = response.data;
-      if (queryParams.isEmpty) {
-        await LocalCacheService.saveCache(_cacheKey, data);
-      }
-    } catch (_) {
-      if (queryParams.isEmpty) {
-        data = await LocalCacheService.getCache(_cacheKey);
-      }
-    }
+    final response = await _apiClient.dio.get(
+      ApiEndpoints.customers,
+      queryParameters: queryParams,
+    );
 
-    final rawList = ApiResponseParser.extractList(data, ['customers']);
+    final rawList = ApiResponseParser.extractList(response.data, ['customers']);
     return rawList
         .map((item) => CustomerModel.fromJson(Map<String, dynamic>.from(item)))
         .toList();

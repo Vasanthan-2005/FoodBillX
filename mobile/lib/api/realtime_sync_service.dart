@@ -5,7 +5,9 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../core/constants/api_endpoints.dart';
 import '../providers/customer_provider.dart';
 import '../providers/dashboard_provider.dart';
+import '../providers/expense_provider.dart';
 import '../providers/menu_provider.dart';
+import '../providers/orders_provider.dart';
 
 class RealtimeSyncState {
   final bool isLive;
@@ -30,11 +32,9 @@ class RealtimeSyncState {
 class RealtimeSyncNotifier extends StateNotifier<RealtimeSyncState> {
   final Ref _ref;
   io.Socket? _socket;
-  Timer? _pollingTimer;
 
   RealtimeSyncNotifier(this._ref) : super(RealtimeSyncState()) {
     _initSocket();
-    _startPeriodicSync();
   }
 
   void _initSocket() {
@@ -44,11 +44,12 @@ class RealtimeSyncNotifier extends StateNotifier<RealtimeSyncState> {
         serverUrl,
         io.OptionBuilder()
             .setTransports(['websocket', 'polling'])
-            .disableAutoConnect()
+            .enableAutoConnect()
+            .enableReconnection()
+            .setReconnectionDelay(1000)
+            .setReconnectionDelayMax(3000)
             .build(),
       );
-
-      _socket?.connect();
 
       _socket?.onConnect((_) {
         state = state.copyWith(isLive: true, lastSyncedAt: DateTime.now());
@@ -62,36 +63,38 @@ class RealtimeSyncNotifier extends StateNotifier<RealtimeSyncState> {
         state = state.copyWith(isLive: false);
       });
 
-      _socket?.on('data_updated', (_) => triggerSync());
-      _socket?.on('order_created', (_) => triggerSync());
-      _socket?.on('expense_added', (_) => triggerSync());
-      _socket?.on('menu_updated', (_) => triggerSync());
+      _socket?.on('data_updated', (_) => triggerRefresh());
+      _socket?.on('order_created', (_) {
+        _ref.read(dashboardProvider.notifier).refresh();
+        _ref.read(ordersProvider.notifier).loadOrders(forceSpinner: false);
+      });
+      _socket?.on('expense_added', (_) {
+        _ref.read(dashboardProvider.notifier).refresh();
+        _ref.read(expenseProvider.notifier).loadAll(forceSpinner: false);
+      });
+      _socket?.on('menu_updated', (_) {
+        _ref.read(menuProvider.notifier).loadCategoriesAndItems();
+      });
     } catch (e) {
       if (kDebugMode) print('Socket initialization error: $e');
     }
   }
 
-  void _startPeriodicSync() {
-    _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      triggerSync(silent: true);
-    });
-  }
-
-  Future<void> triggerSync({bool silent = false}) async {
+  Future<void> triggerRefresh({bool silent = true}) async {
     try {
       state = state.copyWith(lastSyncedAt: DateTime.now(), isLive: true);
       _ref.read(dashboardProvider.notifier).refresh(forceSpinner: !silent);
       _ref.read(menuProvider.notifier).loadCategoriesAndItems();
       _ref.read(customerProvider.notifier).loadCustomers();
+      _ref.read(ordersProvider.notifier).loadOrders(forceSpinner: false);
+      _ref.read(expenseProvider.notifier).loadAll(forceSpinner: false);
     } catch (e) {
-      if (kDebugMode) print('Realtime sync error: $e');
+      if (kDebugMode) print('Realtime refresh error: $e');
     }
   }
 
   @override
   void dispose() {
-    _pollingTimer?.cancel();
     _socket?.disconnect();
     _socket?.dispose();
     super.dispose();

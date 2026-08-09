@@ -21,11 +21,15 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          options.baseUrl = ApiEndpoints.baseUrl;
+          final base = ApiEndpoints.baseUrl;
+          options.baseUrl = base.endsWith('/') ? base : '$base/';
+          if (options.path.startsWith('/')) {
+            options.path = options.path.substring(1);
+          }
           return handler.next(options);
         },
         onError: (DioException error, handler) {
-          String errorMessage = 'Unable to connect to server.';
+          String errorMessage = 'Unable to connect to backend server.';
           if (error.response != null) {
             final data = error.response?.data;
             if (data is Map && data.containsKey('message')) {
@@ -37,10 +41,11 @@ class ApiClient {
           } else if (error.type == DioExceptionType.connectionTimeout ||
               error.type == DioExceptionType.receiveTimeout) {
             errorMessage =
-                'Connection timed out. Using offline cache. You can check server IP in settings.';
+                'Connection timed out. Please check your network or server URL in settings.';
           } else if (error.type == DioExceptionType.connectionError ||
               error.type == DioExceptionType.unknown) {
-            errorMessage = 'Unable to connect to server. Offline cache active.';
+            errorMessage =
+                'Unable to reach backend server. Please verify your internet connection.';
           }
 
           final customError = DioException(

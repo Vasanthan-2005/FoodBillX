@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -13,6 +14,7 @@ const expenseRoutes = require('./routes/expenseRoutes');
 const expenseCategoryRoutes = require('./routes/expenseCategoryRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const authRoutes = require('./routes/authRoutes');
+const bootstrapRoutes = require('./routes/bootstrapRoutes');
 const syncRoutes = require('./routes/syncRoutes');
 
 const app = express();
@@ -48,8 +50,15 @@ const healthHandler = (req, res) => {
 app.get('/health', healthHandler);
 app.get('/api/v1/health', healthHandler);
 
+const uploadRoutes = require('./routes/uploadRoutes');
+
+// Serve uploaded dish images statically
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+
 // API V1 Endpoints
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/bootstrap', bootstrapRoutes);
+app.use('/api/v1/upload', uploadRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/menu-items', menuItemRoutes);

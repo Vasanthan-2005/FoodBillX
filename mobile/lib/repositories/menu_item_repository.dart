@@ -1,13 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../api/api_response_parser.dart';
-import '../api/local_cache_service.dart';
 import '../core/constants/api_endpoints.dart';
 import '../models/menu_item_model.dart';
 
 class MenuItemRepository {
   final ApiClient _apiClient;
-  static const String _cacheKey = 'menu_items';
 
   MenuItemRepository(this._apiClient);
 
@@ -27,23 +25,12 @@ class MenuItemRepository {
       queryParams['isVeg'] = isVeg;
     }
 
-    dynamic data;
-    try {
-      final response = await _apiClient.dio.get(
-        ApiEndpoints.menuItems,
-        queryParameters: queryParams,
-      );
-      data = response.data;
-      if (queryParams.isEmpty) {
-        await LocalCacheService.saveCache(_cacheKey, data);
-      }
-    } catch (_) {
-      if (queryParams.isEmpty) {
-        data = await LocalCacheService.getCache(_cacheKey);
-      }
-    }
+    final response = await _apiClient.dio.get(
+      ApiEndpoints.menuItems,
+      queryParameters: queryParams,
+    );
 
-    final rawList = ApiResponseParser.extractList(data, ['items', 'menuItems']);
+    final rawList = ApiResponseParser.extractList(response.data, ['items', 'menuItems']);
     return rawList
         .map((item) => MenuItemModel.fromJson(Map<String, dynamic>.from(item)))
         .toList();

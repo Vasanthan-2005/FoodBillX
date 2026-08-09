@@ -7,6 +7,7 @@ import '../screens/auth/owner_verification_screen.dart';
 import '../screens/auth/pin_screen.dart';
 import '../screens/auth/reset_pin_screen.dart';
 import '../screens/home_shell_screen.dart';
+import '../screens/network_error_screen.dart';
 import '../screens/splash/splash_screen.dart';
 
 class RouterNotifier extends ChangeNotifier {
@@ -40,8 +41,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final uri = state.uri.toString();
       final isForgotPin = uri.startsWith('/forgot-pin');
 
-      // Allow splash screen to render without initial redirect interruption
-      if (uri == '/splash') {
+      // Allow splash & network-error screen to render without redirect interruption
+      if (uri == '/splash' || uri == '/network-error') {
         return null;
       }
 
@@ -76,6 +77,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/network-error',
+        builder: (context, state) => const NetworkErrorScreen(),
       ),
       GoRoute(
         path: '/master-login',

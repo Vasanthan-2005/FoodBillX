@@ -1,16 +1,16 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'local_image_storage_service.dart';
 
 class ImagePickerService {
   static final ImagePicker _picker = ImagePicker();
 
-  /// Picks and compresses an image from Camera or Gallery.
-  /// Returns a Base64 encoded string suitable for storing or uploading.
+  /// Picks and compresses an image from Camera or Gallery, then saves to local disk.
+  /// Returns a relative image code string suitable for database storage.
   static Future<String?> pickAndCompressImage(
     BuildContext context, {
     required ImageSource source,
+    String? oldImageCode,
   }) async {
     try {
       final XFile? file = await _picker.pickImage(
@@ -22,10 +22,11 @@ class ImagePickerService {
 
       if (file == null) return null;
 
-      final File imageFile = File(file.path);
-      final List<int> imageBytes = await imageFile.readAsBytes();
-      final String base64Image = base64Encode(imageBytes);
-      return 'data:image/jpeg;base64,$base64Image';
+      final String? relativeFilename = await LocalImageStorageService.saveDishImage(
+        file.path,
+        oldImageCode: oldImageCode,
+      );
+      return relativeFilename;
     } catch (e) {
       debugPrint('Error picking image: $e');
       return null;

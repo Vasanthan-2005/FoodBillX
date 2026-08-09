@@ -39,6 +39,10 @@ class CustomerNotifier extends StateNotifier<CustomerState> {
     loadCustomers();
   }
 
+  void updateFromBootstrap(List<CustomerModel> customers) {
+    state = state.copyWith(customers: customers, isLoading: false, errorMessage: null);
+  }
+
   Future<void> loadCustomers({bool forceSpinner = false}) async {
     final showLoading = forceSpinner || state.customers.isEmpty;
     state = state.copyWith(isLoading: showLoading, errorMessage: null);

@@ -10,6 +10,15 @@ class ReportController {
       next(error);
     }
   }
+
+  async getAnalytics(req, res, next) {
+    try {
+      const analytics = await reportService.getFilteredAnalytics(req.query);
+      return sendSuccess(res, 200, 'Analytics reports retrieved', { analytics });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new ReportController();

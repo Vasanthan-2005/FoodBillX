@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -13,7 +12,7 @@ import '../../providers/billing_provider.dart';
 import '../../providers/customer_provider.dart';
 import '../../providers/menu_provider.dart';
 
-import '../../core/widgets/dish_image_widget.dart';
+import '../../core/widgets/dish_card_widget.dart';
 import '../../core/widgets/live_badge_widget.dart';
 import '../../core/widgets/loyalty_input_field_widget.dart';
 
@@ -26,60 +25,20 @@ class BillingScreen extends ConsumerStatefulWidget {
 }
 
 class _BillingScreenState extends ConsumerState<BillingScreen> {
-  final _searchController = TextEditingController();
-  Timer? _searchDebounceTimer;
+  // Search state lifted here but managed without causing grid rebuilds
+  String _searchQuery = '';
 
-  void _onSearchInputChanged(String val) {
-    _searchDebounceTimer?.cancel();
-    _searchDebounceTimer = Timer(const Duration(milliseconds: 250), () {
-      if (mounted) setState(() {});
-    });
+  void _onSearchQueryChanged(String val) {
+    if (val != _searchQuery) {
+      setState(() {
+        _searchQuery = val;
+      });
+    }
   }
 
   @override
   void dispose() {
-    _searchDebounceTimer?.cancel();
-    _searchController.dispose();
     super.dispose();
-  }
-
-  static final Map<String, String> _emojiCache = {};
-
-  String _getItemEmoji(String name, bool isVeg) {
-    final key = '$name-$isVeg';
-    if (_emojiCache.containsKey(key)) return _emojiCache[key]!;
-
-    final lower = name.toLowerCase();
-    String emoji;
-    if (lower.contains('burger')) {
-      emoji = '🍔';
-    } else if (lower.contains('pizza')) {
-      emoji = '🍕';
-    } else if (lower.contains('biryani') || lower.contains('rice')) {
-      emoji = '🍚';
-    } else if (lower.contains('roll') || lower.contains('wrap')) {
-      emoji = '🌯';
-    } else if (lower.contains('fries')) {
-      emoji = '🍟';
-    } else if (lower.contains('drink') ||
-        lower.contains('tea') ||
-        lower.contains('coffee') ||
-        lower.contains('soda')) {
-      emoji = '🥤';
-    } else if (lower.contains('ice') ||
-        lower.contains('dessert') ||
-        lower.contains('cake')) {
-      emoji = '🍨';
-    } else if (lower.contains('chicken') || lower.contains('meat')) {
-      emoji = '🍗';
-    } else if (lower.contains('paneer') || isVeg) {
-      emoji = '🥗';
-    } else {
-      emoji = '🍽';
-    }
-
-    _emojiCache[key] = emoji;
-    return emoji;
   }
 
   void _showCheckoutBottomSheet() {
@@ -581,13 +540,15 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final selectedCategory = menuState.selectedCategoryId;
     final filteredItems = menuState.items.where((item) {
       if (!item.isAvailable) return false;
-      final matchesSearch = _searchController.text.isEmpty ||
-          item.name.toLowerCase().contains(_searchController.text.toLowerCase());
+      final matchesSearch = _searchQuery.isEmpty ||
+          item.name.toLowerCase().contains(_searchQuery.toLowerCase());
       final matchesCat = selectedCategory == null || item.categoryId == selectedCategory;
       return matchesSearch && matchesCat;
     }).toList();
 
     return Scaffold(
+      // Prevent keyboard from causing layout resize which triggers grid rebuild
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('POS Billing & Checkout'),
         actions: [
@@ -775,25 +736,10 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   }) {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: TextField(
-            controller: _searchController,
-            onChanged: _onSearchInputChanged,
-            decoration: InputDecoration(
-              hintText: 'Search food dishes...',
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear_rounded),
-                      onPressed: () {
-                        _searchController.clear();
-                        _onSearchInputChanged('');
-                      },
-                    )
-                  : null,
-            ),
-          ),
+        // Isolated search widget — has its own state, won't trigger grid rebuild
+        _BillingSearchBar(
+          initialQuery: _searchQuery,
+          onChanged: _onSearchQueryChanged,
         ),
 
         // Category Chips
@@ -846,16 +792,15 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                   : GridView.builder(
                       padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
                       gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 125,
-                        childAspectRatio: 0.85,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 0.9,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
                       ),
                       itemCount: filteredItems.length,
                       itemBuilder: (ctx, index) {
                         final item = filteredItems[index];
-                        final emoji = _getItemEmoji(item.name, item.isVeg);
 
                         final cartIndex = billingState.cartItems.indexWhere(
                           (c) => c.menuItem.id == item.id,
@@ -864,125 +809,13 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                             ? billingState.cartItems[cartIndex].quantity
                             : 0;
 
-                        return Card(
-                          elevation: 1.5,
-                          margin: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(14),
-                            onTap: () => billingNotifier.addToCart(item),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Column(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  DishImageWidget(
-                                    imageUrl: item.image,
-                                    fallbackEmoji: emoji,
-                                    size: 34,
-                                    borderRadius: 10,
-                                  ),
-                                  Text(
-                                    item.name,
-                                    maxLines: 1,
-                                    textAlign: TextAlign.center,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          CurrencyFormatter.format(item.price),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w900,
-                                            color: AppColors.primary,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ),
-                                      if (cartQty == 0)
-                                        InkWell(
-                                          onTap: () =>
-                                              billingNotifier.addToCart(item),
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.primary,
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: const Icon(Icons.add,
-                                                color: Colors.white, size: 12),
-                                          ),
-                                        )
-                                      else
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            color:
-                                                AppColors.primary.withAlpha(25),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                            border: Border.all(
-                                                color: AppColors.primary
-                                                    .withAlpha(80)),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              InkWell(
-                                                onTap: () => billingNotifier
-                                                    .decrementQuantity(item.id),
-                                                child: const Padding(
-                                                  padding: EdgeInsets.all(2),
-                                                  child: Icon(Icons.remove,
-                                                      color: AppColors.primary,
-                                                      size: 11),
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 2),
-                                                child: Text(
-                                                  '$cartQty',
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 11,
-                                                    color: AppColors.primary,
-                                                  ),
-                                                ),
-                                              ),
-                                              InkWell(
-                                                onTap: () => billingNotifier
-                                                    .incrementQuantity(item.id),
-                                                child: const Padding(
-                                                  padding: EdgeInsets.all(2),
-                                                  child: Icon(Icons.add,
-                                                      color: AppColors.primary,
-                                                      size: 11),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ).animate().fadeIn(delay: (index * 12).ms);
+                        return DishCardWidget(
+                          item: item,
+                          cartQuantity: cartQty,
+                          onAddToCart: () => billingNotifier.addToCart(item),
+                          onDecrement: () =>
+                              billingNotifier.decrementQuantity(item.id),
+                        );
                       },
                     ),
         ),
@@ -1121,6 +954,77 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+// ─── Isolated Search Bar ──────────────────────────────────────────────────────
+// Keeps its own TextEditingController + debounce timer so the parent grid
+// does NOT rebuild on every keystroke — only when the debounced query changes.
+class _BillingSearchBar extends StatefulWidget {
+  final String initialQuery;
+  final ValueChanged<String> onChanged;
+
+  const _BillingSearchBar({
+    required this.initialQuery,
+    required this.onChanged,
+  });
+
+  @override
+  State<_BillingSearchBar> createState() => _BillingSearchBarState();
+}
+
+class _BillingSearchBarState extends State<_BillingSearchBar> {
+  late final TextEditingController _controller;
+  static const Duration _debounce = Duration(milliseconds: 280);
+  DateTime? _lastChanged;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialQuery);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String val) {
+    final now = DateTime.now();
+    _lastChanged = now;
+    Future.delayed(_debounce, () {
+      if (_lastChanged == now && mounted) {
+        widget.onChanged(val.trim());
+      }
+    });
+    // Keep clear button visible without notifying parent
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: TextField(
+        controller: _controller,
+        onChanged: _onChanged,
+        decoration: InputDecoration(
+          hintText: 'Search food dishes...',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: _controller.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear_rounded),
+                  onPressed: () {
+                    _controller.clear();
+                    widget.onChanged('');
+                    setState(() {});
+                  },
+                )
+              : null,
+        ),
       ),
     );
   }

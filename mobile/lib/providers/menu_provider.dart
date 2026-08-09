@@ -3,6 +3,8 @@ import '../models/category_model.dart';
 import '../models/menu_item_model.dart';
 import '../repositories/category_repository.dart';
 import '../repositories/menu_item_repository.dart';
+import '../repositories/upload_repository.dart';
+import '../core/utils/local_image_storage_service.dart';
 
 class MenuState {
   final List<CategoryModel> categories;
@@ -53,9 +55,10 @@ class MenuState {
 class MenuNotifier extends StateNotifier<MenuState> {
   final CategoryRepository _categoryRepo;
   final MenuItemRepository _menuItemRepo;
+  final UploadRepository _uploadRepo;
   List<MenuItemModel> _allItems = const [];
 
-  MenuNotifier(this._categoryRepo, this._menuItemRepo)
+  MenuNotifier(this._categoryRepo, this._menuItemRepo, this._uploadRepo)
     : super(MenuState.initial()) {
     loadCategoriesAndItems();
   }
@@ -81,6 +84,19 @@ class MenuNotifier extends StateNotifier<MenuState> {
       isLoading: false,
       errorMessage: null,
     );
+  }
+
+  void updateFromBootstrap(
+    List<CategoryModel> categories,
+    List<MenuItemModel> items,
+  ) {
+    _allItems = items;
+    state = state.copyWith(
+      categories: categories,
+      isLoading: false,
+      errorMessage: null,
+    );
+    _applyFilters();
   }
 
   Future<void> loadCategoriesAndItems({bool forceSpinner = false}) async {
@@ -184,14 +200,33 @@ class MenuNotifier extends StateNotifier<MenuState> {
   }
 
   Future<void> toggleAvailability(String itemId) async {
+    final index = _allItems.indexWhere((i) => i.id == itemId);
+    if (index == -1) return;
+
+    final oldItem = _allItems[index];
+    final updatedItem = oldItem.copyWith(isAvailable: !oldItem.isAvailable);
+
+    // 1. Instant local state update (0ms UI latency!)
+    _allItems[index] = updatedItem;
+    _applyFilters();
+
+    // 2. Perform backend API sync in background
     try {
       await _menuItemRepo.toggleAvailability(itemId);
-      await loadMenuItems();
-    } catch (_) {}
+    } catch (_) {
+      // Revert if network failed
+      _allItems[index] = oldItem;
+      _applyFilters();
+    }
   }
 
   Future<bool> deleteMenuItem(String itemId) async {
     try {
+      final index = _allItems.indexWhere((i) => i.id == itemId);
+      if (index != -1 && _allItems[index].image.isNotEmpty) {
+        await _uploadRepo.deleteDishImage(_allItems[index].image);
+        await LocalImageStorageService.deleteDishImage(_allItems[index].image);
+      }
       await _menuItemRepo.delete(itemId);
       await loadMenuItems();
       return true;
@@ -204,5 +239,6 @@ class MenuNotifier extends StateNotifier<MenuState> {
 final menuProvider = StateNotifierProvider<MenuNotifier, MenuState>((ref) {
   final categoryRepo = ref.watch(categoryRepositoryProvider);
   final menuItemRepo = ref.watch(menuItemRepositoryProvider);
-  return MenuNotifier(categoryRepo, menuItemRepo);
+  final uploadRepo = ref.watch(uploadRepositoryProvider);
+  return MenuNotifier(categoryRepo, menuItemRepo, uploadRepo);
 });

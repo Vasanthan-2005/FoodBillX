@@ -52,6 +52,10 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     loadAll();
   }
 
+  void updateFromBootstrap(List<ExpenseModel> expenses) {
+    state = state.copyWith(expenses: expenses, isLoading: false, errorMessage: null);
+  }
+
   Future<void> loadAll({bool forceSpinner = false}) async {
     final showLoading = forceSpinner || state.expenses.isEmpty;
     state = state.copyWith(isLoading: showLoading, errorMessage: null);
