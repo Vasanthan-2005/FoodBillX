@@ -16,21 +16,24 @@ import 'settings/settings_screen.dart';
 import '../providers/dashboard_provider.dart';
 
 class HomeShellScreen extends ConsumerStatefulWidget {
-  const HomeShellScreen({super.key});
+  final int initialIndex;
+
+  const HomeShellScreen({super.key, this.initialIndex = 0});
 
   @override
   ConsumerState<HomeShellScreen> createState() => _HomeShellScreenState();
 }
 
 class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
-  int _currentIndex = 0;
+  late int _currentIndex;
   late final List<Widget?> _pages;
 
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialIndex;
     _pages = List<Widget?>.filled(5, null);
-    _pages[0] = _buildPage(0);
+    _pages[_currentIndex] = _buildPage(_currentIndex);
 
     // Initialize and keep the realtime sync service alive for the app session
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -42,11 +45,11 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
   void _onSelectTab(int index) {
     if (index < 0 || index >= _pages.length) return;
     setState(() {
-      _pages[index] ??= _buildPage(index);
+      _pages[index] = _buildPage(index);
       _currentIndex = index;
     });
 
-    if (index == 0 || index == 4) {
+    if (index == 3 || index == 4) {
       ref.read(dashboardProvider.notifier).refresh();
     }
   }
@@ -78,29 +81,29 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
 
   Widget _buildPage(int index) {
     return switch (index) {
-      0 => HomeDashboardScreen(
+      0 => BillingScreen(
+        key: const PageStorageKey('BillingScreen'),
+        onOpenSettings: _openSettings,
+      ),
+      1 => MenuManagementScreen(
+        key: const PageStorageKey('MenuManagementScreen'),
+        onOpenSettings: _openSettings,
+      ),
+      2 => CustomerManagementScreen(
+        key: const PageStorageKey('CustomerManagementScreen'),
+        onOpenSettings: _openSettings,
+      ),
+      3 => DashboardScreen(
+        key: const PageStorageKey('ReportsScreen'),
+        onGoToBilling: () => _onSelectTab(0),
+        onOpenSettings: _openSettings,
+      ),
+      4 => HomeDashboardScreen(
         key: const PageStorageKey('HomeDashboardScreen'),
         onNavigateToTab: _onSelectTab,
         onOpenSettings: _openSettings,
         onOpenOrders: _openPreviousOrders,
         onOpenExpenses: _openExpenseTracker,
-      ),
-      1 => BillingScreen(
-        key: const PageStorageKey('BillingScreen'),
-        onOpenSettings: _openSettings,
-      ),
-      2 => MenuManagementScreen(
-        key: const PageStorageKey('MenuManagementScreen'),
-        onOpenSettings: _openSettings,
-      ),
-      3 => CustomerManagementScreen(
-        key: const PageStorageKey('CustomerManagementScreen'),
-        onOpenSettings: _openSettings,
-      ),
-      4 => DashboardScreen(
-        key: const PageStorageKey('ReportsScreen'),
-        onGoToBilling: () => _onSelectTab(1),
-        onOpenSettings: _openSettings,
       ),
       _ => const SizedBox.shrink(),
     };
@@ -110,6 +113,8 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    _pages[_currentIndex] ??= _buildPage(_currentIndex);
+
     final screens = List<Widget>.generate(
       _pages.length,
       (index) => _pages[index] ?? const SizedBox.shrink(),
@@ -117,11 +122,6 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
     );
 
     const navDestinations = [
-      NavigationDestination(
-        icon: Icon(Icons.dashboard_outlined),
-        selectedIcon: Icon(Icons.dashboard_rounded, color: AppColors.primary),
-        label: 'Dashboard',
-      ),
       NavigationDestination(
         icon: Icon(Icons.point_of_sale_outlined),
         selectedIcon: Icon(
@@ -153,6 +153,11 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
           color: AppColors.primary,
         ),
         label: 'Reports',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.dashboard_outlined),
+        selectedIcon: Icon(Icons.dashboard_rounded, color: AppColors.primary),
+        label: 'Dashboard',
       ),
     ];
 

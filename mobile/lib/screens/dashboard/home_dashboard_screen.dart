@@ -233,7 +233,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         ),
                   ),
                   TextButton.icon(
-                    onPressed: () => widget.onNavigateToTab(4), // Reports (Tab 4)
+                    onPressed: () => widget.onNavigateToTab(3), // Reports (Tab 3)
                     icon: const Icon(Icons.chevron_right_rounded, size: 18),
                     label: const Text('Full Reports'),
                   ),
