@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/constants/api_endpoints.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/widgets/onboarding_dialog.dart';
-import '../../providers/customer_provider.dart';
-import '../../providers/dashboard_provider.dart';
-import '../../providers/menu_provider.dart';
 import '../../providers/pin_auth_provider.dart';
 import '../../providers/settings_provider.dart';
 
@@ -173,50 +169,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showServerConfigDialog() {
-    final controller = TextEditingController(text: ApiEndpoints.baseUrl);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Backend Server Connection', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Enter backend server URL or IP:', style: TextStyle(fontSize: 13)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Server Base URL / IP',
-                prefixIcon: Icon(Icons.dns_rounded),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              final newUrl = controller.text.trim();
-              Navigator.pop(ctx);
-              await ApiEndpoints.saveCustomServerUrl(newUrl);
-              if (mounted) {
-                SnackbarUtils.showSuccess(context, 'Server URL updated');
-                ref.read(menuProvider.notifier).loadCategoriesAndItems(forceSpinner: true);
-                ref.read(customerProvider.notifier).loadCustomers(forceSpinner: true);
-                ref.read(dashboardProvider.notifier).refresh(forceSpinner: true);
-                ref.read(settingsProvider.notifier).loadSettings();
-              }
-            },
-            child: const Text('Save & Connect'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     ref.listen<SettingsState>(settingsProvider, (_, next) {
@@ -236,9 +188,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Security & Server
+                    // Security Settings
                     Text(
-                      'Security & Connection',
+                      'Security',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
@@ -258,24 +210,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           const Divider(height: 1),
                           ListTile(
                             leading: const CircleAvatar(
-                              backgroundColor: Colors.blue,
-                              child: Icon(Icons.dns_rounded, color: Colors.white, size: 20),
-                            ),
-                            title: const Text('Server Connection & Host IP', style: TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('Target: ${ApiEndpoints.baseUrl}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: _showServerConfigDialog,
-                          ),
-                          const Divider(height: 1),
-                          ListTile(
-                            leading: const CircleAvatar(
                               backgroundColor: Colors.amber,
                               child: Icon(Icons.explore_rounded, color: Colors.white, size: 20),
                             ),
                             title: const Text('Replay App Onboarding Tour', style: TextStyle(fontWeight: FontWeight.bold)),
                             subtitle: const Text('Interactive feature walkthrough for staff'),
                             trailing: const Icon(Icons.chevron_right),
-                            onTap: () => OnboardingDialog.forceShow(context),
+                            onTap: () {
+                              Navigator.pop(context);
+                              OnboardingDialog.forceShow(context);
+                            },
                           ),
                         ],
                       ),

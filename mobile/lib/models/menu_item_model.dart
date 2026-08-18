@@ -72,7 +72,7 @@ class MenuItemModel {
       description: json['description'] ?? '',
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       discount: (json['discount'] as num?)?.toDouble() ?? 0.0,
-      gstPercentage: (json['gstPercentage'] as num?)?.toDouble() ?? 5.0,
+      gstPercentage: (json['gstPercentage'] as num?)?.toDouble() ?? 0.0,
       image: json['image'] ?? '',
       isVeg: json['isVeg'] ?? true,
       isAvailable: json['isAvailable'] ?? true,

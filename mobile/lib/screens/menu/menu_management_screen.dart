@@ -24,7 +24,7 @@ class MenuManagementScreen extends ConsumerStatefulWidget {
 }
 
 class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
-  bool _isGridView = false;
+  final bool _isGridView = false;
 
   // ── Category Management ──────────────────────────────────────────
   void _showCategoryManagerSheet() {
@@ -432,20 +432,6 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
         title: const Text('Menu Management'),
         actions: [
           IconButton(
-            icon: Icon(
-              _isGridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
-            ),
-            tooltip: _isGridView
-                ? 'Switch to List View'
-                : 'Switch to Grid View',
-            onPressed: () => setState(() => _isGridView = !_isGridView),
-          ),
-          IconButton(
-            icon: const Icon(Icons.category_outlined),
-            tooltip: 'Manage Categories',
-            onPressed: _showCategoryManagerSheet,
-          ),
-          IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
             onPressed: widget.onOpenSettings,
@@ -479,6 +465,28 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
+                // Add Category Button (+ in left corner)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ActionChip(
+                    visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
+                    backgroundColor: AppColors.primary.withAlpha(25),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(color: AppColors.primary.withAlpha(120)),
+                    ),
+                    avatar: const Icon(Icons.add_rounded, color: AppColors.primary, size: 20),
+                    label: const Text(
+                      'Category',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    onPressed: _showCategoryManagerSheet,
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.only(right: 8.0),
                   child: ChoiceChip(

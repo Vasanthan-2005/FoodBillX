@@ -93,7 +93,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     try {
       await _expenseRepo.create(data);
       await loadAll(forceSpinner: false);
-      _ref.read(dashboardProvider.notifier).refresh();
+      await _ref.read(dashboardProvider.notifier).refresh();
       return true;
     } catch (_) {
       return false;
@@ -104,7 +104,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     try {
       await _expenseRepo.update(id, data);
       await loadAll(forceSpinner: false);
-      _ref.read(dashboardProvider.notifier).refresh();
+      await _ref.read(dashboardProvider.notifier).refresh();
       return true;
     } catch (_) {
       return false;
@@ -115,7 +115,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     try {
       await _expenseRepo.delete(id);
       await loadAll(forceSpinner: false);
-      _ref.read(dashboardProvider.notifier).refresh();
+      await _ref.read(dashboardProvider.notifier).refresh();
       return true;
     } catch (_) {
       return false;

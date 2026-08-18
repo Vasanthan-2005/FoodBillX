@@ -328,7 +328,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
     try {
       final checkout = state;
       final settings = _ref.read(settingsProvider).settings;
-      final prefix = settings?.invoicePrefix ?? 'INV-';
+      final prefix = settings?.invoicePrefix ?? 'B';
 
       final items = checkout.cartItems.map((ci) {
         return OrderItemModel(

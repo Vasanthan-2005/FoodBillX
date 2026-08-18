@@ -142,26 +142,53 @@ class DishCardWidget extends StatelessWidget {
                           if (cartQuantity == 0)
                             InkWell(
                               onTap: onAddToCart,
+                              borderRadius: BorderRadius.circular(10),
                               child: Container(
-                                padding: const EdgeInsets.all(6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 7,
+                                ),
                                 decoration: BoxDecoration(
                                   color: AppColors.primary,
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primary.withAlpha(80),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                                child: const Icon(
-                                  Icons.add,
-                                  color: Colors.white,
-                                  size: 14,
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.add_rounded,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                    SizedBox(width: 2),
+                                    Text(
+                                      'ADD',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 11,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             )
                           else
                             Container(
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withAlpha(25),
-                                borderRadius: BorderRadius.circular(8),
+                                color: AppColors.primary.withAlpha(30),
+                                borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                  color: AppColors.primary.withAlpha(100),
+                                  color: AppColors.primary.withAlpha(140),
+                                  width: 1.2,
                                 ),
                               ),
                               child: Row(
@@ -169,37 +196,48 @@ class DishCardWidget extends StatelessWidget {
                                 children: [
                                   InkWell(
                                     onTap: onDecrement,
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(10),
+                                      bottomLeft: Radius.circular(10),
+                                    ),
                                     child: const Padding(
                                       padding: EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 4,
+                                        horizontal: 10,
+                                        vertical: 6,
                                       ),
                                       child: Icon(
-                                        Icons.remove,
+                                        Icons.remove_rounded,
                                         color: AppColors.primary,
-                                        size: 12,
+                                        size: 18,
                                       ),
                                     ),
                                   ),
-                                  Text(
-                                    '$cartQuantity',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: AppColors.primary,
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    child: Text(
+                                      '$cartQuantity',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 14,
+                                        color: AppColors.primary,
+                                      ),
                                     ),
                                   ),
                                   InkWell(
                                     onTap: onAddToCart,
+                                    borderRadius: const BorderRadius.only(
+                                      topRight: Radius.circular(10),
+                                      bottomRight: Radius.circular(10),
+                                    ),
                                     child: const Padding(
                                       padding: EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 4,
+                                        horizontal: 10,
+                                        vertical: 6,
                                       ),
                                       child: Icon(
-                                        Icons.add,
+                                        Icons.add_rounded,
                                         color: AppColors.primary,
-                                        size: 12,
+                                        size: 18,
                                       ),
                                     ),
                                   ),

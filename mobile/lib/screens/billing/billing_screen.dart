@@ -239,7 +239,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Bill Summary Box (NO GST)
+                    // Bill Summary Box
                     Container(
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
@@ -264,6 +264,32 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                               ),
                             ],
                           ),
+                          if (cartState.totalDiscount > 0) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Discount:', style: TextStyle(color: Colors.green)),
+                                Text(
+                                  '-${CurrencyFormatter.format(cartState.totalDiscount)}',
+                                  style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (cartState.gstAmount > 0) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('GST Tax:'),
+                                Text(
+                                  CurrencyFormatter.format(cartState.gstAmount),
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ],
                           if (cartState.serviceChargeAmount > 0) ...[
                             const SizedBox(height: 8),
                             Row(
@@ -304,13 +330,16 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         backgroundColor: AppColors.primary,
                         elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
                       onPressed: cartState.isSubmitting
                           ? null
@@ -340,6 +369,32 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                 color: Colors.white,
                               ),
                             ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Cancel Bill Button
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        foregroundColor: Colors.redAccent,
+                        side: BorderSide(color: Colors.redAccent.withAlpha(140)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      onPressed: () {
+                        notifier.clearCart();
+                        Navigator.pop(context);
+                        SnackbarUtils.showSuccess(context, 'Bill cancelled');
+                      },
+                      icon: const Icon(Icons.cancel_outlined, size: 20),
+                      label: const Text(
+                        'Cancel Bill & Return to Menu',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -894,12 +949,22 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                           Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.remove_circle_outline, size: 20),
+                                icon: const Icon(Icons.remove_circle_outline, size: 26, color: AppColors.primary),
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(),
                                 onPressed: () => billingNotifier.decrementQuantity(item.menuItem.id),
                               ),
-                              Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 6),
+                                child: Text(
+                                  '${item.quantity}',
+                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                                ),
+                              ),
                               IconButton(
-                                icon: const Icon(Icons.add_circle_outline, size: 20),
+                                icon: const Icon(Icons.add_circle_outline, size: 26, color: AppColors.primary),
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(),
                                 onPressed: () => billingNotifier.incrementQuantity(item.menuItem.id),
                               ),
                             ],

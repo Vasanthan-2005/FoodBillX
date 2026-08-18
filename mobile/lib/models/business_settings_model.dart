@@ -40,7 +40,7 @@ class BusinessSettingsModel {
       address: json['address'] ?? '',
       gstin: json['gstin'] ?? '',
       currency: json['currency'] ?? '₹',
-      invoicePrefix: json['invoicePrefix'] ?? 'INV-',
+      invoicePrefix: json['invoicePrefix'] ?? 'B',
       taxPercentage: (json['taxPercentage'] as num?)?.toDouble() ?? 5.0,
       serviceChargePercentage:
           (json['serviceChargePercentage'] as num?)?.toDouble() ?? 0.0,
