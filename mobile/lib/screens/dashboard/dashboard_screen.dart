@@ -71,7 +71,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final chartXLabels = switch (_selectedTimeframe) {
       'Monthly' => ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'],
       'Weekly' => const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-      _ => ['12 AM', '4 AM', '8 AM', '12 PM', '4 PM', '8 PM'],
+      _ => const ['12-4 AM', '4-8 AM', '8-12 PM', '12-4 PM', '4-8 PM', '8-12 AM'],
     };
 
     final chartDataPoints = switch (_selectedTimeframe) {

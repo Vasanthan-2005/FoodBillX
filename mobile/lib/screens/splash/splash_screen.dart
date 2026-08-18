@@ -63,23 +63,31 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width: 105,
-                    height: 105,
+                    width: 110,
+                    height: 110,
+                    padding: const EdgeInsets.all(3.5),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
+                      gradient: AppColors.primaryGradient,
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withAlpha(120),
-                          blurRadius: 32,
-                          offset: const Offset(0, 10),
+                          color: AppColors.primary.withAlpha(160),
+                          blurRadius: 36,
+                          spreadRadius: 4,
+                          offset: const Offset(0, 8),
+                        ),
+                        BoxShadow(
+                          color: AppColors.primary.withAlpha(90),
+                          blurRadius: 18,
+                          spreadRadius: 1,
                         ),
                       ],
                     ),
                     child: ClipOval(
                       child: Image.asset(
                         'assets/icons/app_icon.jpeg',
-                        width: 105,
-                        height: 105,
+                        width: 102,
+                        height: 102,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(
                           padding: const EdgeInsets.all(24),
