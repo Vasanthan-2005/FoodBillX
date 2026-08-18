@@ -59,7 +59,7 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/icons/app_icon.png"
+  image_path: "assets/icons/app_icon.jpeg"
   min_sdk_android: 21
 
 # Pin path_provider_android to pre-JNI version to avoid libdartjni.so crash
