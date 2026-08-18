@@ -63,9 +63,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(24),
+                    width: 105,
+                    height: 105,
                     decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient,
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
@@ -75,10 +75,25 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.restaurant_rounded,
-                      color: Colors.white,
-                      size: 52,
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/icons/app_icon.jpeg',
+                        width: 105,
+                        height: 105,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: const BoxDecoration(
+                            gradient: AppColors.primaryGradient,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.restaurant_rounded,
+                            color: Colors.white,
+                            size: 52,
+                          ),
+                        ),
+                      ),
                     ),
                   )
                       .animate()
