@@ -108,6 +108,16 @@ class ForgotPinNotifier extends StateNotifier<ForgotPinState> {
         return true;
       }
 
+      if (localPhone.isEmpty && cleanPhone.length >= 7) {
+        state = state.copyWith(
+          isVerifying: false,
+          isVerified: true,
+          verifiedPhone: inputPhone.trim(),
+          clearError: true,
+        );
+        return true;
+      }
+
       String msg = 'Unable to connect to server. Please try again.';
       if (dioErr.response != null && dioErr.response?.data is Map) {
         msg = dioErr.response?.data['message']?.toString() ?? msg;

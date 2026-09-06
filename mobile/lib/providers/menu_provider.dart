@@ -3,7 +3,6 @@ import '../models/category_model.dart';
 import '../models/menu_item_model.dart';
 import '../repositories/category_repository.dart';
 import '../repositories/menu_item_repository.dart';
-import '../repositories/upload_repository.dart';
 import '../core/utils/local_image_storage_service.dart';
 
 class MenuState {
@@ -55,10 +54,9 @@ class MenuState {
 class MenuNotifier extends StateNotifier<MenuState> {
   final CategoryRepository _categoryRepo;
   final MenuItemRepository _menuItemRepo;
-  final UploadRepository _uploadRepo;
   List<MenuItemModel> _allItems = const [];
 
-  MenuNotifier(this._categoryRepo, this._menuItemRepo, this._uploadRepo)
+  MenuNotifier(this._categoryRepo, this._menuItemRepo)
     : super(MenuState.initial()) {
     loadCategoriesAndItems();
   }
@@ -224,7 +222,6 @@ class MenuNotifier extends StateNotifier<MenuState> {
     try {
       final index = _allItems.indexWhere((i) => i.id == itemId);
       if (index != -1 && _allItems[index].image.isNotEmpty) {
-        await _uploadRepo.deleteDishImage(_allItems[index].image);
         await LocalImageStorageService.deleteDishImage(_allItems[index].image);
       }
       await _menuItemRepo.delete(itemId);
@@ -239,6 +236,5 @@ class MenuNotifier extends StateNotifier<MenuState> {
 final menuProvider = StateNotifierProvider<MenuNotifier, MenuState>((ref) {
   final categoryRepo = ref.watch(categoryRepositoryProvider);
   final menuItemRepo = ref.watch(menuItemRepositoryProvider);
-  final uploadRepo = ref.watch(uploadRepositoryProvider);
-  return MenuNotifier(categoryRepo, menuItemRepo, uploadRepo);
+  return MenuNotifier(categoryRepo, menuItemRepo);
 });

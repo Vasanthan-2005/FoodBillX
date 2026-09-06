@@ -72,7 +72,23 @@ class _MasterLoginScreenState extends ConsumerState<MasterLoginScreen> {
       }
     } on DioException catch (dioErr) {
       if (mounted) {
-        String msg = 'Connection failed. Please check network connection.';
+        // Offline Fallback: allow default master credentials when server is offline
+        if (masterId == 'admin' &&
+            (masterPassword == 'masterpass123' || masterPassword == 'admin123')) {
+          setState(() {
+            _isLoading = false;
+          });
+          SnackbarUtils.showSuccess(
+            context,
+            'Master Authentication Successful (Offline)! Set your security PIN.',
+          );
+          ref.read(pinAuthProvider.notifier).setMode(PinFlowMode.createPin);
+          context.go('/pin');
+          return;
+        }
+
+        String msg =
+            'Connection failed. When offline, use default master credentials.';
         if (dioErr.response?.data is Map &&
             dioErr.response?.data['message'] != null) {
           msg = dioErr.response?.data['message'].toString() ?? msg;
@@ -84,9 +100,23 @@ class _MasterLoginScreenState extends ConsumerState<MasterLoginScreen> {
       }
     } catch (e) {
       if (mounted) {
+        if (masterId == 'admin' &&
+            (masterPassword == 'masterpass123' || masterPassword == 'admin123')) {
+          setState(() {
+            _isLoading = false;
+          });
+          SnackbarUtils.showSuccess(
+            context,
+            'Master Authentication Successful (Offline)! Set your security PIN.',
+          );
+          ref.read(pinAuthProvider.notifier).setMode(PinFlowMode.createPin);
+          context.go('/pin');
+          return;
+        }
         setState(() {
           _isLoading = false;
-          _errorMessage = 'An error occurred during verification: ${e.toString()}';
+          _errorMessage =
+              'An error occurred during verification: ${e.toString()}';
         });
       }
     }

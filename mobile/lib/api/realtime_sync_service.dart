@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../core/constants/api_endpoints.dart';
+import '../core/network/connectivity_service.dart';
 import '../providers/customer_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/expense_provider.dart';
@@ -14,7 +15,7 @@ class RealtimeSyncState {
   final DateTime? lastSyncedAt;
 
   RealtimeSyncState({
-    this.isLive = true,
+    this.isLive = false,
     this.lastSyncedAt,
   });
 
@@ -32,9 +33,29 @@ class RealtimeSyncState {
 class RealtimeSyncNotifier extends StateNotifier<RealtimeSyncState> {
   final Ref _ref;
   io.Socket? _socket;
+  StreamSubscription? _connectivitySub;
 
-  RealtimeSyncNotifier(this._ref) : super(RealtimeSyncState()) {
-    _initSocket();
+  RealtimeSyncNotifier(this._ref) : super(RealtimeSyncState(isLive: false)) {
+    _initConnectionManagement();
+  }
+
+  Future<void> _initConnectionManagement() async {
+    final connectivity = _ref.read(connectivityServiceProvider);
+    final isOnline = await connectivity.isConnected();
+    if (isOnline) {
+      _initSocket();
+    }
+
+    _connectivitySub = connectivity.onConnectivityChanged.listen((isOnline) {
+      if (isOnline) {
+        if (_socket == null || !(_socket!.connected)) {
+          _initSocket();
+        }
+      } else {
+        _socket?.disconnect();
+        state = state.copyWith(isLive: false);
+      }
+    });
   }
 
   void _initSocket() {
@@ -95,6 +116,7 @@ class RealtimeSyncNotifier extends StateNotifier<RealtimeSyncState> {
 
   @override
   void dispose() {
+    _connectivitySub?.cancel();
     _socket?.disconnect();
     _socket?.dispose();
     super.dispose();

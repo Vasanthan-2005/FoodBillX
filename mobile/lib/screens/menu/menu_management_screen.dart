@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
@@ -8,7 +7,7 @@ import '../../core/utils/snackbar_utils.dart';
 import '../../core/widgets/empty_state_widget.dart';
 import '../../models/menu_item_model.dart';
 import '../../providers/menu_provider.dart';
-import '../../repositories/upload_repository.dart';
+import '../../core/utils/local_image_storage_service.dart';
 import '../../core/utils/image_picker_service.dart';
 import '../../core/widgets/dish_card_widget.dart';
 import '../../core/widgets/dish_image_widget.dart';
@@ -304,18 +303,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                 if (!formKey.currentState!.validate()) return;
                                 setModalState(() => isSaving = true);
 
-                                String finalImageUrl = selectedImage.trim();
-
-                                // 1. Upload local image to backend if a new photo was picked
-                                if (finalImageUrl.isNotEmpty &&
-                                    File(finalImageUrl).existsSync()) {
-                                  final uploadedUrl = await ref
-                                      .read(uploadRepositoryProvider)
-                                      .uploadDishImage(File(finalImageUrl));
-                                  if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
-                                    finalImageUrl = uploadedUrl;
-                                  }
-                                }
+                                final String finalImageUrl = selectedImage.trim();
 
                                 final item = MenuItemModel(
                                   id: existingItem?.id ?? '',
@@ -345,13 +333,13 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                         .read(menuProvider.notifier)
                                         .updateMenuItem(item);
 
-                                    // Clean up old cloud image if photo was changed
+                                    // Clean up old local image if photo was changed
                                     if (ok &&
                                         existingItem.image.isNotEmpty &&
                                         existingItem.image != finalImageUrl) {
-                                      await ref
-                                          .read(uploadRepositoryProvider)
-                                          .deleteDishImage(existingItem.image);
+                                      await LocalImageStorageService.deleteDishImage(
+                                        existingItem.image,
+                                      );
                                     }
                                   }
                                 } catch (_) {
