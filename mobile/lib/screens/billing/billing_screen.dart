@@ -415,110 +415,252 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       text: ref.read(billingProvider).loyaltyCardNumber,
     );
     final formKey = GlobalKey<FormState>();
+    String? dialogError;
 
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Quick Customer Registration'),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: nameCtrl,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  decoration: const InputDecoration(
-                    labelText: 'Customer Name *',
-                    hintText: 'e.g. John Doe',
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                  validator: CustomerValidator.validateName,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: phoneCtrl,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number *',
-                    hintText: '10-digit mobile number',
-                    prefixIcon: Icon(Icons.phone),
-                  ),
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                  ],
-                  validator: CustomerValidator.validatePhone,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: cardCtrl,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  decoration: const InputDecoration(
-                    labelText: 'Loyalty Card Number *',
-                    hintText: 'e.g. HMB-1001',
-                    prefixIcon: Icon(Icons.credit_card_rounded),
-                  ),
-                  inputFormatters: [
-                    LengthLimitingTextInputFormatter(25),
-                  ],
-                  validator: CustomerValidator.validateLoyaltyCard,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-              onPressed: () async {
-                if (formKey.currentState!.validate()) {
-                  final phoneInput = phoneCtrl.text.trim();
-                  final cardInput = cardCtrl.text.trim();
-                  final customers = ref.read(customerProvider).customers;
-                  if (customers.any((c) => c.phone.trim() == phoneInput)) {
-                    SnackbarUtils.showError(ctx, 'Customer already exists with this mobile number.');
-                    return;
-                  }
-                  if (customers.any((c) => c.loyaltyCardNumber.trim().toLowerCase() == cardInput.toLowerCase())) {
-                    SnackbarUtils.showError(ctx, 'Loyalty card #$cardInput is already assigned to another customer.');
-                    return;
-                  }
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final customers = ref.read(customerProvider).customers;
+            final currentCard = cardCtrl.text.trim().toLowerCase();
+            final currentPhone = phoneCtrl.text.trim();
 
-                  try {
-                    final created = await ref.read(billingProvider.notifier).quickRegisterCustomerAndSelect(
-                      name: nameCtrl.text.trim(),
-                      phone: phoneInput,
-                      loyaltyCardNumber: cardInput,
-                    );
-                    if (ctx.mounted) {
-                      if (created != null) {
-                        Navigator.pop(ctx);
-                        SnackbarUtils.showSuccess(context, 'Registered ${created.name}!');
-                      } else {
-                        SnackbarUtils.showError(
-                          ctx,
-                          ref.read(customerProvider).errorMessage ??
-                              'Customer already exists with this mobile or card number.',
+            final cardConflictCustomer = currentCard.isNotEmpty
+                ? customers.where((c) => c.loyaltyCardNumber.trim().toLowerCase() == currentCard).firstOrNull
+                : null;
+
+            final phoneConflictCustomer = currentPhone.length == 10
+                ? customers.where((c) => c.phone.trim() == currentPhone).firstOrNull
+                : null;
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('Quick Customer Registration', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Prominent Inline Error Banner
+                      if (dialogError != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.red.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline_rounded, color: Colors.red, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  dialogError!,
+                                  style: const TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      TextFormField(
+                        controller: nameCtrl,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        decoration: const InputDecoration(
+                          labelText: 'Customer Name *',
+                          hintText: 'e.g. John Doe',
+                          prefixIcon: Icon(Icons.person),
+                        ),
+                        validator: CustomerValidator.validateName,
+                      ),
+                      const SizedBox(height: 12),
+
+                      TextFormField(
+                        controller: phoneCtrl,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        decoration: const InputDecoration(
+                          labelText: 'Phone Number *',
+                          hintText: '10-digit mobile number',
+                          prefixIcon: Icon(Icons.phone),
+                        ),
+                        keyboardType: TextInputType.phone,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(10),
+                        ],
+                        validator: CustomerValidator.validatePhone,
+                        onChanged: (_) {
+                          setDialogState(() {
+                            dialogError = null;
+                          });
+                        },
+                      ),
+
+                      if (phoneConflictCustomer != null) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline_rounded, color: Colors.orange, size: 16),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Phone already belongs to ${phoneConflictCustomer.name}',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () {
+                                  ref.read(billingProvider.notifier).selectCustomer(phoneConflictCustomer);
+                                  Navigator.pop(ctx);
+                                  SnackbarUtils.showSuccess(context, 'Selected ${phoneConflictCustomer.name}!');
+                                },
+                                child: const Text('Attach', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: cardCtrl,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        decoration: const InputDecoration(
+                          labelText: 'Loyalty Card Number *',
+                          hintText: 'e.g. HMB-1001',
+                          prefixIcon: Icon(Icons.credit_card_rounded),
+                        ),
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(25),
+                        ],
+                        validator: CustomerValidator.validateLoyaltyCard,
+                        onChanged: (_) {
+                          setDialogState(() {
+                            dialogError = null;
+                          });
+                        },
+                      ),
+
+                      // Card Conflict Warning & 1-Tap Attach Button
+                      if (cardConflictCustomer != null) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber.shade400),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 16),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Card already assigned to ${cardConflictCustomer.name}',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                ),
+                              ),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () {
+                                  ref.read(billingProvider.notifier).selectCustomer(cardConflictCustomer);
+                                  Navigator.pop(ctx);
+                                  SnackbarUtils.showSuccess(context, 'Attached ${cardConflictCustomer.name} (${cardConflictCustomer.loyaltyCardNumber})');
+                                },
+                                child: const Text('Attach', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                  onPressed: () async {
+                    if (formKey.currentState!.validate()) {
+                      final phoneInput = phoneCtrl.text.trim();
+                      final cardInput = cardCtrl.text.trim();
+                      final currentCusts = ref.read(customerProvider).customers;
+
+                      if (currentCusts.any((c) => c.phone.trim() == phoneInput)) {
+                        setDialogState(() {
+                          dialogError = 'Customer already exists with phone #$phoneInput.';
+                        });
+                        return;
+                      }
+                      if (currentCusts.any((c) => c.loyaltyCardNumber.trim().toLowerCase() == cardInput.toLowerCase())) {
+                        setDialogState(() {
+                          dialogError = 'Loyalty card #$cardInput is already assigned to another customer.';
+                        });
+                        return;
+                      }
+
+                      try {
+                        final created = await ref.read(billingProvider.notifier).quickRegisterCustomerAndSelect(
+                          name: nameCtrl.text.trim(),
+                          phone: phoneInput,
+                          loyaltyCardNumber: cardInput,
                         );
+                        if (ctx.mounted) {
+                          if (created != null) {
+                            Navigator.pop(ctx);
+                            SnackbarUtils.showSuccess(context, 'Registered & attached ${created.name}!');
+                          } else {
+                            setDialogState(() {
+                              dialogError = ref.read(customerProvider).errorMessage ??
+                                  'Customer already exists with this mobile or card number.';
+                            });
+                          }
+                        }
+                      } catch (_) {
+                        if (ctx.mounted) {
+                          setDialogState(() {
+                            dialogError = 'Failed to register customer. Check mobile and card number.';
+                          });
+                        }
                       }
                     }
-                  } catch (_) {
-                    if (ctx.mounted) {
-                      SnackbarUtils.showError(ctx, 'Failed to register customer. Check mobile and card number.');
-                    }
-                  }
-                }
-              },
-              child: const Text('Save & Attach', style: TextStyle(color: Colors.white)),
-            ),
-          ],
+                  },
+                  child: const Text('Save & Attach', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
         );
       },
     );
