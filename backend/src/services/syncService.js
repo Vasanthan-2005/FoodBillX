@@ -201,6 +201,119 @@ class SyncService {
 
     return results;
   }
+
+  /**
+   * Export all cloud data stored in MongoDB across all collections.
+   */
+  async exportAllData() {
+    const exportedAt = new Date();
+    const [
+      categories,
+      menuItems,
+      customers,
+      expenseCategories,
+      expenses,
+      orders,
+      settings,
+    ] = await Promise.all([
+      Category.find().lean(),
+      MenuItem.find().populate('category', '_id name').lean(),
+      Customer.find().lean(),
+      ExpenseCategory.find().lean(),
+      Expense.find().lean(),
+      Order.find().lean(),
+      BusinessSettings.findOne().lean(),
+    ]);
+
+    return {
+      version: '1.0',
+      exportedAt: exportedAt.toISOString(),
+      database: 'FoodBillX MongoDB Cloud Backup',
+      summary: {
+        totalCategories: categories.length,
+        totalMenuItems: menuItems.length,
+        totalCustomers: customers.length,
+        totalOrders: orders.length,
+        totalExpenses: expenses.length,
+        totalExpenseCategories: expenseCategories.length,
+        totalRecords:
+          categories.length +
+          menuItems.length +
+          customers.length +
+          orders.length +
+          expenses.length +
+          expenseCategories.length,
+      },
+      data: {
+        businessSettings: settings,
+        categories,
+        menuItems,
+        customers,
+        orders,
+        expenses,
+        expenseCategories,
+      },
+    };
+  }
+
+  /**
+   * Get sync and cloud backup status including record counts and latest activity.
+   */
+  async getSyncStatus() {
+    const [
+      categoriesCount,
+      menuItemsCount,
+      customersCount,
+      ordersCount,
+      expensesCount,
+      expenseCategoriesCount,
+      latestOrder,
+      latestExpense,
+      latestReceipt,
+    ] = await Promise.all([
+      Category.countDocuments(),
+      MenuItem.countDocuments(),
+      Customer.countDocuments(),
+      Order.countDocuments(),
+      Expense.countDocuments(),
+      ExpenseCategory.countDocuments(),
+      Order.findOne().sort({ updatedAt: -1 }).select('updatedAt').lean(),
+      Expense.findOne().sort({ updatedAt: -1 }).select('updatedAt').lean(),
+      SyncReceipt.findOne().sort({ createdAt: -1 }).select('createdAt').lean(),
+    ]);
+
+    const dates = [
+      latestReceipt?.createdAt,
+      latestOrder?.updatedAt,
+      latestExpense?.updatedAt,
+    ].filter(Boolean);
+
+    const latestSyncTime = dates.length > 0
+      ? new Date(Math.max(...dates.map((d) => new Date(d).getTime()))).toISOString()
+      : null;
+
+    const totalRecords =
+      categoriesCount +
+      menuItemsCount +
+      customersCount +
+      ordersCount +
+      expensesCount +
+      expenseCategoriesCount;
+
+    return {
+      databaseStatus: 'Connected',
+      lastSyncedAt: latestSyncTime,
+      totalRecords,
+      counts: {
+        orders: ordersCount,
+        expenses: expensesCount,
+        customers: customersCount,
+        menuItems: menuItemsCount,
+        categories: categoriesCount,
+        expenseCategories: expenseCategoriesCount,
+      },
+    };
+  }
 }
 
 module.exports = new SyncService();

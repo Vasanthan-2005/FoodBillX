@@ -31,6 +31,24 @@ class SyncController {
       next(error);
     }
   }
+
+  async export(req, res, next) {
+    try {
+      const exportData = await syncService.exportAllData();
+      return sendSuccess(res, 200, 'MongoDB cloud database export completed', exportData);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async status(req, res, next) {
+    try {
+      const statusData = await syncService.getSyncStatus();
+      return sendSuccess(res, 200, 'Cloud sync status fetched', statusData);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new SyncController();

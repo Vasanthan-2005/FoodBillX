@@ -26,7 +26,7 @@ function MainDashboard() {
     ...(currentPeriod === 'custom' && customRange.startDate && customRange.endDate ? customRange : {}),
   };
 
-  const { analytics, settings, isLoading, isError, error, refetch, isFetching, lastUpdated } =
+  const { analytics, settings, syncStatus, isLoading, isError, error, refetch, isFetching, lastUpdated } =
     useReportsData(filterParams);
 
   const handlePeriodChange = (period) => {
@@ -41,7 +41,13 @@ function MainDashboard() {
   return (
     <div className="min-h-screen bg-[#0F172A] text-slate-100 pb-16 selection:bg-[#FF5722] selection:text-white">
       {/* 1. Header */}
-      <Header settings={settings} lastUpdated={lastUpdated} isFetching={isFetching} onRefresh={refetch} />
+      <Header
+        settings={settings}
+        syncStatus={syncStatus}
+        lastUpdated={lastUpdated}
+        isFetching={isFetching}
+        onRefresh={refetch}
+      />
 
       {/* 2. Date Filter */}
       <DateFilter
@@ -102,7 +108,7 @@ function MainDashboard() {
             <RecentOrdersTable recentOrders={analytics?.recentOrders} />
 
             {/* 12. Export Actions */}
-            <ExportActions analytics={analytics} />
+            <ExportActions analytics={analytics} syncStatus={syncStatus} />
           </>
         )}
       </main>

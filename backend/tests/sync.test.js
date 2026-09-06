@@ -70,4 +70,23 @@ describe('Offline sync contract', () => {
       .query({ since: 'not-a-date' });
     expect(invalid.statusCode).toBe(400);
   });
+
+  it('exports all mongodb cloud data with collections summary', async () => {
+    const res = await request(app).get('/api/v1/sync/export');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.version).toBe('1.0');
+    expect(res.body.data.summary).toBeDefined();
+    expect(res.body.data.data).toBeDefined();
+    expect(Array.isArray(res.body.data.data.categories)).toBe(true);
+  });
+
+  it('provides real-time sync status and collection counts', async () => {
+    const res = await request(app).get('/api/v1/sync/status');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.databaseStatus).toBe('Connected');
+    expect(res.body.data.counts).toBeDefined();
+    expect(typeof res.body.data.totalRecords).toBe('number');
+  });
 });

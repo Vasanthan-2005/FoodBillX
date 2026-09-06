@@ -18,20 +18,33 @@ export const useReportsData = (filterParams) => {
     staleTime: 300000,
   });
 
+  const syncStatusQuery = useQuery({
+    queryKey: ['syncStatus'],
+    queryFn: reportsService.getSyncStatus,
+    staleTime: 15000,
+    refetchInterval: 30000,
+  });
+
   useEffect(() => {
     if (analyticsQuery.dataUpdatedAt) {
       setLastUpdated(new Date(analyticsQuery.dataUpdatedAt));
     }
   }, [analyticsQuery.dataUpdatedAt]);
 
+  const handleRefetchAll = () => {
+    analyticsQuery.refetch();
+    syncStatusQuery.refetch();
+  };
+
   return {
     analytics: analyticsQuery.data,
     settings: settingsQuery.data,
+    syncStatus: syncStatusQuery.data,
     isLoading: analyticsQuery.isLoading,
     isError: analyticsQuery.isError,
     error: analyticsQuery.error,
-    refetch: analyticsQuery.refetch,
-    isFetching: analyticsQuery.isFetching,
+    refetch: handleRefetchAll,
+    isFetching: analyticsQuery.isFetching || syncStatusQuery.isFetching,
     lastUpdated,
   };
 };

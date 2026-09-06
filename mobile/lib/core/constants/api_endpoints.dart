@@ -70,34 +70,11 @@ class ApiEndpoints {
     return liveProductionUrl;
   }
 
-  // Auth
-  static const String login = '/auth/login';
-  static const String register = '/auth/register';
-  static const String getProfile = '/auth/me';
-  static const String updateProfile = '/auth/profile';
-  static const String changePassword = '/auth/change-password';
-  static const String verifyOwner = '/auth/verify-owner';
+  // Auth (Fallback for Master PIN setup & Owner Verification)
   static const String masterLogin = '/auth/master-login';
+  static const String verifyOwner = '/auth/verify-owner';
 
-  // Business Settings
-  static const String settings = '/settings';
-
-  // Categories & Menu Items
-  static const String categories = '/categories';
-  static const String menuItems = '/menu-items';
-
-  // Customers & Loyalty
-  static const String customers = '/customers';
-  static const String loyaltyCards = '/loyalty-cards';
-
-  // Orders & Billing
-  static const String orders = '/orders';
-
-  // Expenses
-  static const String expenses = '/expenses';
-  static const String expenseCategories = '/expense-categories';
-
-  // Reports & Analytics
-  static const String reportsSummary = '/reports/summary';
-  static const String analytics = '/analytics';
+  // Cloud Backup & Sync (Only network data flow for mobile)
+  static const String syncPush = '/sync/push';
+  static const String syncPull = '/sync/pull';
 }

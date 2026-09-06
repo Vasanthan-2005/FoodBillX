@@ -6,15 +6,8 @@ const morgan = require('morgan');
 const errorHandler = require('./middleware/errorHandler');
 
 const settingsRoutes = require('./routes/settingsRoutes');
-const categoryRoutes = require('./routes/categoryRoutes');
-const menuItemRoutes = require('./routes/menuItemRoutes');
-const orderRoutes = require('./routes/orderRoutes');
-const customerRoutes = require('./routes/customerRoutes');
-const expenseRoutes = require('./routes/expenseRoutes');
-const expenseCategoryRoutes = require('./routes/expenseCategoryRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const authRoutes = require('./routes/authRoutes');
-const bootstrapRoutes = require('./routes/bootstrapRoutes');
 const syncRoutes = require('./routes/syncRoutes');
 
 const app = express();
@@ -50,22 +43,9 @@ const healthHandler = (req, res) => {
 app.get('/health', healthHandler);
 app.get('/api/v1/health', healthHandler);
 
-const uploadRoutes = require('./routes/uploadRoutes');
-
-// Serve uploaded dish images statically
-app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
-
-// API V1 Endpoints
+// Active API V1 Endpoints
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/bootstrap', bootstrapRoutes);
-app.use('/api/v1/upload', uploadRoutes);
 app.use('/api/v1/settings', settingsRoutes);
-app.use('/api/v1/categories', categoryRoutes);
-app.use('/api/v1/menu-items', menuItemRoutes);
-app.use('/api/v1/orders', orderRoutes);
-app.use('/api/v1/customers', customerRoutes);
-app.use('/api/v1/expenses', expenseRoutes);
-app.use('/api/v1/expense-categories', expenseCategoryRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/sync', syncRoutes);
 
