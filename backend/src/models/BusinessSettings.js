@@ -44,7 +44,7 @@ const businessSettingsSchema = new mongoose.Schema(
     },
     taxPercentage: {
       type: Number,
-      default: 5.0,
+      default: 0.0,
       min: 0,
       max: 100,
     },

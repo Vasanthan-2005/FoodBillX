@@ -8,7 +8,6 @@ import '../../core/utils/snackbar_utils.dart';
 import '../../core/widgets/empty_state_widget.dart';
 import '../../models/menu_item_model.dart';
 import '../../providers/menu_provider.dart';
-import '../../providers/settings_provider.dart';
 import '../../repositories/upload_repository.dart';
 import '../../core/utils/image_picker_service.dart';
 import '../../core/widgets/dish_card_widget.dart';
@@ -83,9 +82,6 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
       return;
     }
 
-    final settings = ref.read(settingsProvider).settings;
-    final defaultGst = settings?.taxPercentage ?? 5.0;
-
     final nameController = TextEditingController(
       text: existingItem?.name ?? '',
     );
@@ -94,9 +90,6 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
     );
     final discountController = TextEditingController(
       text: existingItem?.discount.toString() ?? '0',
-    );
-    final gstController = TextEditingController(
-      text: existingItem?.gstPercentage.toString() ?? defaultGst.toString(),
     );
 
     String selectedCatId =
@@ -324,9 +317,6 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                   }
                                 }
 
-                                final gstVal =
-                                    double.tryParse(gstController.text.trim()) ??
-                                    defaultGst;
                                 final item = MenuItemModel(
                                   id: existingItem?.id ?? '',
                                   categoryId: selectedCatId,
@@ -338,7 +328,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                                         discountController.text.trim(),
                                       ) ??
                                       0.0,
-                                  gstPercentage: gstVal,
+                                  gstPercentage: 0.0,
                                   image: finalImageUrl,
                                   isVeg: isVeg,
                                   isAvailable: existingItem?.isAvailable ?? true,
@@ -418,7 +408,6 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
         nameController.dispose();
         priceController.dispose();
         discountController.dispose();
-        gstController.dispose();
       });
     }
 

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/customer_validator.dart';
 import '../../core/utils/pdf_invoice_helper.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/utils/whatsapp_helper.dart';
@@ -427,25 +429,43 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               children: [
                 TextFormField(
                   controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Customer Name *', prefixIcon: Icon(Icons.person)),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Name is required' : null,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  decoration: const InputDecoration(
+                    labelText: 'Customer Name *',
+                    hintText: 'e.g. John Doe',
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                  validator: CustomerValidator.validateName,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: phoneCtrl,
-                  decoration: const InputDecoration(labelText: 'Phone Number *', prefixIcon: Icon(Icons.phone)),
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number *',
+                    hintText: '10-digit mobile number',
+                    prefixIcon: Icon(Icons.phone),
+                  ),
                   keyboardType: TextInputType.phone,
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Phone is required' : null,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                  validator: CustomerValidator.validatePhone,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: cardCtrl,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   decoration: const InputDecoration(
                     labelText: 'Loyalty Card Number *',
                     hintText: 'e.g. HMB-1001',
                     prefixIcon: Icon(Icons.credit_card_rounded),
                   ),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Loyalty card is required' : null,
+                  inputFormatters: [
+                    LengthLimitingTextInputFormatter(25),
+                  ],
+                  validator: CustomerValidator.validateLoyaltyCard,
                 ),
               ],
             ),
@@ -460,9 +480,14 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
                   final phoneInput = phoneCtrl.text.trim();
+                  final cardInput = cardCtrl.text.trim();
                   final customers = ref.read(customerProvider).customers;
                   if (customers.any((c) => c.phone.trim() == phoneInput)) {
                     SnackbarUtils.showError(ctx, 'Customer already exists with this mobile number.');
+                    return;
+                  }
+                  if (customers.any((c) => c.loyaltyCardNumber.trim().toLowerCase() == cardInput.toLowerCase())) {
+                    SnackbarUtils.showError(ctx, 'Loyalty card #$cardInput is already assigned to another customer.');
                     return;
                   }
 
@@ -470,19 +495,23 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     final created = await ref.read(billingProvider.notifier).quickRegisterCustomerAndSelect(
                       name: nameCtrl.text.trim(),
                       phone: phoneInput,
-                      loyaltyCardNumber: cardCtrl.text.trim(),
+                      loyaltyCardNumber: cardInput,
                     );
                     if (ctx.mounted) {
                       if (created != null) {
                         Navigator.pop(ctx);
                         SnackbarUtils.showSuccess(context, 'Registered ${created.name}!');
                       } else {
-                        SnackbarUtils.showError(ctx, 'Customer already exists with this mobile number.');
+                        SnackbarUtils.showError(
+                          ctx,
+                          ref.read(customerProvider).errorMessage ??
+                              'Customer already exists with this mobile or card number.',
+                        );
                       }
                     }
                   } catch (_) {
                     if (ctx.mounted) {
-                      SnackbarUtils.showError(ctx, 'Customer already exists with this mobile number.');
+                      SnackbarUtils.showError(ctx, 'Failed to register customer. Check mobile and card number.');
                     }
                   }
                 }

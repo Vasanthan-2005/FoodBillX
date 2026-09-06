@@ -1,71 +1,42 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../api/api_client.dart';
-import '../api/api_response_parser.dart';
-import '../core/constants/api_endpoints.dart';
+import '../core/storage/local_database.dart';
 import '../models/menu_item_model.dart';
 
 class MenuItemRepository {
-  final ApiClient _apiClient;
-
-  MenuItemRepository(this._apiClient);
+  final LocalDatabase _localDb = LocalDatabase.instance;
 
   Future<List<MenuItemModel>> getAll({
     String? categoryServerId,
     String? search,
     bool? isVeg,
   }) async {
-    final queryParams = <String, dynamic>{};
-    if (categoryServerId != null && categoryServerId.isNotEmpty) {
-      queryParams['category'] = categoryServerId;
-    }
-    if (search != null && search.isNotEmpty) {
-      queryParams['search'] = search;
-    }
-    if (isVeg != null) {
-      queryParams['isVeg'] = isVeg;
-    }
-
-    final response = await _apiClient.dio.get(
-      ApiEndpoints.menuItems,
-      queryParameters: queryParams,
+    return await _localDb.getMenuItems(
+      categoryId: categoryServerId,
+      search: search,
+      isVeg: isVeg,
     );
-
-    final rawList = ApiResponseParser.extractList(response.data, ['items', 'menuItems']);
-    return rawList
-        .map((item) => MenuItemModel.fromJson(Map<String, dynamic>.from(item)))
-        .toList();
   }
 
   Future<MenuItemModel> create(MenuItemModel item) async {
     _validate(item);
-    final response = await _apiClient.dio.post(
-      ApiEndpoints.menuItems,
-      data: item.toJson(),
-    );
-    final rawItem = ApiResponseParser.extractMap(response.data, ['item', 'menuItem']);
-    return MenuItemModel.fromJson(rawItem);
+    return await _localDb.insertMenuItem(item);
   }
 
   Future<MenuItemModel> update(MenuItemModel item) async {
     _validate(item);
-    final response = await _apiClient.dio.put(
-      '${ApiEndpoints.menuItems}/${item.id}',
-      data: item.toJson(),
-    );
-    final rawItem = ApiResponseParser.extractMap(response.data, ['item', 'menuItem']);
-    return MenuItemModel.fromJson(rawItem);
+    final updated = await _localDb.updateMenuItem(item);
+    if (updated == null) {
+      throw Exception('Menu item not found');
+    }
+    return updated;
   }
 
   Future<MenuItemModel?> toggleAvailability(String id) async {
-    final response = await _apiClient.dio.patch(
-      '${ApiEndpoints.menuItems}/$id/toggle-availability',
-    );
-    final rawItem = ApiResponseParser.extractMap(response.data, ['item', 'menuItem']);
-    return MenuItemModel.fromJson(rawItem);
+    return await _localDb.toggleMenuItemAvailability(id);
   }
 
   Future<void> delete(String id) async {
-    await _apiClient.dio.delete('${ApiEndpoints.menuItems}/$id');
+    await _localDb.deleteMenuItem(id);
   }
 
   void _validate(MenuItemModel item) {
@@ -88,5 +59,5 @@ class MenuItemRepository {
 }
 
 final menuItemRepositoryProvider = Provider<MenuItemRepository>((ref) {
-  return MenuItemRepository(ref.watch(apiClientProvider));
+  return MenuItemRepository();
 });

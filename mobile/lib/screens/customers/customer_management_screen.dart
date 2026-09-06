@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/customer_validator.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/widgets/empty_state_widget.dart';
 import '../../core/widgets/error_state_widget.dart';
@@ -46,6 +48,7 @@ class _CustomerManagementScreenState
     final nameController = TextEditingController(text: existing?.name ?? '');
     final phoneController = TextEditingController(text: existing?.phone ?? '');
     final cardController = TextEditingController(text: existing?.loyaltyCardNumber ?? '');
+    final formKey = GlobalKey<FormState>();
 
     final isEdit = existing != null;
     final String? customerId = existing?.id;
@@ -59,35 +62,53 @@ class _CustomerManagementScreenState
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Customer Name *',
-                  prefixIcon: Icon(Icons.person),
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameController,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  decoration: const InputDecoration(
+                    labelText: 'Customer Name *',
+                    hintText: 'e.g. John Doe',
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                  validator: CustomerValidator.validateName,
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number *',
-                  prefixIcon: Icon(Icons.phone),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: phoneController,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number *',
+                    hintText: '10-digit mobile number',
+                    prefixIcon: Icon(Icons.phone),
+                  ),
+                  validator: CustomerValidator.validatePhone,
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: cardController,
-                decoration: const InputDecoration(
-                  labelText: 'Loyalty Card Number (Optional)',
-                  hintText: 'Auto-generated if left blank',
-                  prefixIcon: Icon(Icons.credit_card_rounded),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: cardController,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  inputFormatters: [
+                    LengthLimitingTextInputFormatter(25),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Loyalty Card Number *',
+                    hintText: 'e.g. HMB-1001',
+                    prefixIcon: Icon(Icons.credit_card_rounded),
+                  ),
+                  validator: CustomerValidator.validateLoyaltyCard,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [
@@ -97,17 +118,28 @@ class _CustomerManagementScreenState
           ),
           ElevatedButton(
             onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+
               final name = nameController.text.trim();
               final phone = phoneController.text.trim();
               final card = cardController.text.trim();
-              if (name.isEmpty || phone.isEmpty) {
-                SnackbarUtils.showError(ctx, 'Name and phone are required');
+
+              final customers = ref.read(customerProvider).customers;
+              final phoneConflict = customers.any(
+                (c) => c.phone.trim() == phone && (isEdit ? c.id != customerId : true),
+              );
+              if (phoneConflict) {
+                SnackbarUtils.showError(ctx, 'Customer already exists with this mobile number.');
                 return;
               }
 
-              final customers = ref.read(customerProvider).customers;
-              if (!isEdit && customers.any((c) => c.phone.trim() == phone)) {
-                SnackbarUtils.showError(ctx, 'Customer already exists with this mobile number.');
+              final cardConflict = customers.any(
+                (c) =>
+                    c.loyaltyCardNumber.trim().toLowerCase() == card.toLowerCase() &&
+                    (isEdit ? c.id != customerId : true),
+              );
+              if (cardConflict) {
+                SnackbarUtils.showError(ctx, 'Loyalty card #$card is already assigned to another customer.');
                 return;
               }
 
@@ -115,7 +147,7 @@ class _CustomerManagementScreenState
               final data = {
                 'name': name,
                 'phone': phone,
-                if (card.isNotEmpty) 'loyaltyCardNumber': card,
+                'loyaltyCardNumber': card,
               };
 
               bool ok;
@@ -138,7 +170,7 @@ class _CustomerManagementScreenState
                   SnackbarUtils.showError(
                     ctx,
                     ref.read(customerProvider).errorMessage ??
-                        'Customer already exists with this mobile number.',
+                        'Failed to save customer. Check mobile or card number.',
                   );
                 }
               }
@@ -153,6 +185,7 @@ class _CustomerManagementScreenState
   void _showAssignCardDialog(String? customerId, String currentCard) {
     if (customerId == null) return;
     final cardController = TextEditingController(text: currentCard);
+    final formKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
@@ -162,12 +195,20 @@ class _CustomerManagementScreenState
           'Assign Loyalty Card',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        content: TextField(
-          controller: cardController,
-          decoration: const InputDecoration(
-            labelText: 'Card Number',
-            hintText: 'e.g. HMB-102030',
-            prefixIcon: Icon(Icons.credit_card_rounded),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: cardController,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(25),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Loyalty Card Number *',
+              hintText: 'e.g. HMB-1001',
+              prefixIcon: Icon(Icons.credit_card_rounded),
+            ),
+            validator: CustomerValidator.validateLoyaltyCard,
           ),
         ),
         actions: [
@@ -177,8 +218,20 @@ class _CustomerManagementScreenState
           ),
           ElevatedButton(
             onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
               final card = cardController.text.trim();
-              if (card.isEmpty) return;
+
+              final customers = ref.read(customerProvider).customers;
+              final cardConflict = customers.any(
+                (c) =>
+                    c.loyaltyCardNumber.trim().toLowerCase() == card.toLowerCase() &&
+                    c.id != customerId,
+              );
+              if (cardConflict) {
+                SnackbarUtils.showError(ctx, 'Loyalty card #$card is already assigned to another customer.');
+                return;
+              }
+
               final notifier = ref.read(customerProvider.notifier);
               Navigator.pop(ctx);
               final ok = await notifier.assignLoyaltyCard(customerId, card);

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/widgets/onboarding_dialog.dart';
 import '../../providers/pin_auth_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/sync_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -169,12 +171,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  String _formatLastSync(DateTime dt) {
+    final now = DateTime.now();
+    final isToday = now.year == dt.year && now.month == dt.month && now.day == dt.day;
+    final timeStr = DateFormat('h:mm a').format(dt);
+    if (isToday) return 'Today, $timeStr';
+    final yest = now.subtract(const Duration(days: 1));
+    final isYest = yest.year == dt.year && yest.month == dt.month && yest.day == dt.day;
+    if (isYest) return 'Yesterday, $timeStr';
+    return DateFormat('dd MMM, h:mm a').format(dt);
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<SettingsState>(settingsProvider, (_, next) {
       _populateSettings(next);
     });
     final state = ref.watch(settingsProvider);
+    final syncState = ref.watch(syncProvider);
     _populateSettings(state);
 
     return Scaffold(
@@ -188,6 +202,117 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Cloud Synchronization (Offline-First)
+                    Text(
+                      'Cloud Synchronization',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: syncState.isOffline
+                                      ? Colors.grey.withAlpha(40)
+                                      : (syncState.pendingCount > 0
+                                          ? Colors.amber.withAlpha(40)
+                                          : Colors.green.withAlpha(40)),
+                                  child: Icon(
+                                    syncState.isOffline
+                                        ? Icons.cloud_off_rounded
+                                        : (syncState.pendingCount > 0
+                                            ? Icons.cloud_upload_outlined
+                                            : Icons.cloud_done_rounded),
+                                    color: syncState.isOffline
+                                        ? Colors.grey
+                                        : (syncState.pendingCount > 0
+                                            ? Colors.amber.shade800
+                                            : Colors.green),
+                                    size: 22,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        syncState.isOffline
+                                            ? 'Offline'
+                                            : (syncState.pendingCount > 0
+                                                ? '● ${syncState.pendingCount} changes waiting to upload'
+                                                : '✓ Synced'),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                          color: syncState.isOffline
+                                              ? Colors.grey
+                                              : (syncState.pendingCount > 0
+                                                  ? Colors.amber.shade900
+                                                  : Colors.green.shade700),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        syncState.isOffline
+                                            ? 'Your data is safely stored on this device.'
+                                            : (syncState.lastSyncedAt != null
+                                                ? 'Last synced: ${_formatLastSync(syncState.lastSyncedAt!)}'
+                                                : 'Not synced yet'),
+                                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 48,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                onPressed: syncState.isSyncing
+                                    ? null
+                                    : () async {
+                                        final res = await ref.read(syncProvider.notifier).uploadToCloud();
+                                        if (context.mounted) {
+                                          if (res.success) {
+                                            SnackbarUtils.showSuccess(context, res.message);
+                                          } else {
+                                            SnackbarUtils.showInfo(context, res.message);
+                                          }
+                                        }
+                                      },
+                                icon: syncState.isSyncing
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      )
+                                    : const Icon(Icons.cloud_upload_rounded, color: Colors.white, size: 20),
+                                label: Text(
+                                  syncState.isSyncing ? 'Uploading...' : 'Upload to Cloud',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
                     // Security Settings
                     Text(
                       'Security',

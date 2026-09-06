@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../api/api_client.dart';
+import '../core/storage/local_database.dart';
 
 class DashboardState {
   final double todayRevenue;
@@ -144,9 +144,11 @@ class DashboardState {
 }
 
 class DashboardNotifier extends StateNotifier<DashboardState> {
-  final ApiClient _apiClient;
+  final LocalDatabase _localDb = LocalDatabase.instance;
 
-  DashboardNotifier(this._apiClient) : super(DashboardState());
+  DashboardNotifier() : super(DashboardState()) {
+    refresh();
+  }
 
   void populateFromData(Map<String, dynamic> summary) {
     final kpis = summary['kpis'] is Map ? Map<String, dynamic>.from(summary['kpis']) : <String, dynamic>{};
@@ -239,20 +241,15 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   }
 
   Future<void> refresh({bool forceSpinner = false}) async {
-    final showLoading = forceSpinner || (state.recentDailyRevenue.isEmpty && state.todayRevenue == 0);
-    state = state.copyWith(isLoading: showLoading, errorMessage: null);
+    final showLoading = forceSpinner && state.todayRevenue == 0;
+    if (showLoading) {
+      state = state.copyWith(isLoading: true, errorMessage: null);
+    }
 
     try {
-      final response = await _apiClient.dio.get('/reports/dashboard');
-      final data = response.data;
-      Map<String, dynamic> summary = {};
-      if (data is Map && data.containsKey('data')) {
-        final d = data['data'];
-        if (d is Map && d.containsKey('summary')) {
-          summary = Map<String, dynamic>.from(d['summary']);
-        }
-      }
-      populateFromData(summary);
+      // 100% Offline Aggregation from SQLite Local Database
+      final metrics = await _localDb.computeDashboardMetrics();
+      populateFromData(metrics);
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -264,6 +261,5 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
 final dashboardProvider =
     StateNotifierProvider<DashboardNotifier, DashboardState>((ref) {
-      final apiClient = ref.watch(apiClientProvider);
-      return DashboardNotifier(apiClient);
-    });
+  return DashboardNotifier();
+});

@@ -89,19 +89,10 @@ class BillingState {
     return res < 0 ? 0 : res;
   }
 
-  double get gstAmount {
-    if (subtotalAfterDiscount <= 0 || subtotal <= 0) return 0.0;
-    final ratio = subtotalAfterDiscount / subtotal;
-    return cartItems.fold(0.0, (sum, item) {
-      final itemGross = item.menuItem.price * item.quantity;
-      final effectiveItemSubtotal = itemGross * ratio;
-      return sum + (effectiveItemSubtotal * item.menuItem.gstPercentage / 100);
-    });
-  }
+  double get gstAmount => 0.0;
 
   double get grandTotal {
-    return (subtotalAfterDiscount + gstAmount + serviceChargeAmount)
-        .roundToDouble();
+    return (subtotalAfterDiscount + serviceChargeAmount).roundToDouble();
   }
 
   double get serviceChargeAmount =>
@@ -336,7 +327,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
           name: ci.menuItem.name,
           price: ci.menuItem.price,
           quantity: ci.quantity,
-          gstPercentage: ci.menuItem.gstPercentage,
+          gstPercentage: 0.0,
           subtotal: ci.subtotal,
           notes: ci.notes,
         );

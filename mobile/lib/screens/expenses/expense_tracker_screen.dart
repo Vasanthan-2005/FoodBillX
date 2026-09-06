@@ -35,6 +35,60 @@ class ExpenseTrackerScreen extends ConsumerStatefulWidget {
 }
 
 class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
+  void _showSetBudgetDialog(double currentBudget) {
+    final controller = TextEditingController(
+      text: currentBudget > 0 ? currentBudget.toStringAsFixed(0) : '',
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.savings_rounded, color: AppColors.primary),
+            SizedBox(width: 8),
+            Text('Monthly Budget', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Set a monthly operational expense budget. Spent totals automatically reset on the 1st of every month.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Monthly Budget Limit (₹)',
+                hintText: 'e.g. 50000',
+                prefixIcon: Icon(Icons.currency_rupee_rounded),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () async {
+              final amount = double.tryParse(controller.text.trim()) ?? 0.0;
+              Navigator.pop(ctx);
+              await ref.read(expenseProvider.notifier).setMonthlyBudget(amount);
+              if (mounted) {
+                SnackbarUtils.showSuccess(context, 'Monthly budget updated');
+              }
+            },
+            child: const Text('Save Budget', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showAddEditExpenseDialog([ExpenseModel? existing]) {
     final titleController = TextEditingController(text: existing?.title ?? '');
     final amountController = TextEditingController(
@@ -267,6 +321,96 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
                 style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
               ),
             ],
+          ),
+        ),
+
+        // Monthly Budget Card (Offline-First with Auto-Reset)
+        Card(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.savings_rounded, color: AppColors.primary, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${DateFormat('MMMM yyyy').format(DateTime.now())} Budget',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                    InkWell(
+                      onTap: () => _showSetBudgetDialog(state.monthlyBudget),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        child: Row(
+                          children: [
+                            Text(
+                              state.monthlyBudget > 0
+                                  ? CurrencyFormatter.format(state.monthlyBudget)
+                                  : 'Set Budget',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(Icons.edit_outlined, size: 14, color: AppColors.primary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: state.monthlyBudget > 0 ? state.budgetUsageRatio : 0.0,
+                    minHeight: 8,
+                    backgroundColor: Colors.grey.withAlpha(50),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      state.isOverBudget
+                          ? Colors.red
+                          : (state.budgetUsageRatio > 0.85
+                              ? Colors.orange
+                              : Colors.green),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Spent: ${CurrencyFormatter.format(state.monthExpenseTotal)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    Text(
+                      state.monthlyBudget > 0
+                          ? (state.isOverBudget
+                              ? 'Over budget by ${CurrencyFormatter.format(state.monthExpenseTotal - state.monthlyBudget)}'
+                              : 'Remaining: ${CurrencyFormatter.format(state.budgetRemaining)}')
+                          : 'Auto-resets every 1st of month',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: state.isOverBudget ? Colors.red : Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
 

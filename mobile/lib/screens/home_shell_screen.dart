@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/realtime_sync_service.dart';
 import '../core/constants/app_colors.dart';
+import '../core/services/background_sync_service.dart';
+import '../core/services/sync_manager.dart';
 import '../core/widgets/onboarding_dialog.dart';
 import 'billing/billing_screen.dart';
 import 'customers/customer_management_screen.dart';
@@ -39,6 +41,8 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(realtimeSyncProvider); // Ensures socket + polling starts
       OnboardingDialog.showIfNeeded(context);
+      // Quietly evaluate if daily 8 PM sync is due and run in background
+      BackgroundSyncService.checkAndRunForegroundEveningSync(ref.read(syncManagerProvider));
     });
   }
 

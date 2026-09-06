@@ -29,7 +29,7 @@ const menuItemSchema = new mongoose.Schema(
     },
     gstPercentage: {
       type: Number,
-      default: 5.0,
+      default: 0.0,
       min: 0,
       max: 100,
     },

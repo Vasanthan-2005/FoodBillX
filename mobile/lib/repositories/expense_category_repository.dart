@@ -1,54 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../api/api_client.dart';
-import '../api/api_response_parser.dart';
-import '../core/constants/api_endpoints.dart';
+import '../core/storage/local_database.dart';
 import '../models/expense_category_model.dart';
 
 class ExpenseCategoryRepository {
-  final ApiClient _apiClient;
-
-  ExpenseCategoryRepository(this._apiClient);
+  final LocalDatabase _localDb = LocalDatabase.instance;
 
   Future<List<ExpenseCategoryModel>> getAll() async {
-    final response = await _apiClient.dio.get(ApiEndpoints.expenseCategories);
-    final rawList = ApiResponseParser.extractList(response.data, ['categories']);
-    return rawList
-        .map(
-          (item) =>
-              ExpenseCategoryModel.fromJson(Map<String, dynamic>.from(item)),
-        )
-        .toList();
+    return await _localDb.getExpenseCategories();
   }
 
   Future<ExpenseCategoryModel> create(String name, String icon) async {
-    final response = await _apiClient.dio.post(
-      ApiEndpoints.expenseCategories,
-      data: {'name': name, 'icon': icon},
-    );
-    final item = ApiResponseParser.extractMap(response.data, ['category']);
-    return ExpenseCategoryModel.fromJson(item);
-  }
-
-  Future<ExpenseCategoryModel> update(
-    String id,
-    String name,
-    String icon,
-  ) async {
-    final response = await _apiClient.dio.put(
-      '${ApiEndpoints.expenseCategories}/$id',
-      data: {'name': name, 'icon': icon},
-    );
-    final item = ApiResponseParser.extractMap(response.data, ['category']);
-    return ExpenseCategoryModel.fromJson(item);
+    return await _localDb.insertExpenseCategory(name, icon);
   }
 
   Future<void> delete(String id) async {
-    await _apiClient.dio.delete('${ApiEndpoints.expenseCategories}/$id');
+    await _localDb.deleteExpenseCategory(id);
   }
 }
 
-final expenseCategoryRepositoryProvider = Provider<ExpenseCategoryRepository>((
-  ref,
-) {
-  return ExpenseCategoryRepository(ref.watch(apiClientProvider));
+final expenseCategoryRepositoryProvider = Provider<ExpenseCategoryRepository>((ref) {
+  return ExpenseCategoryRepository();
 });

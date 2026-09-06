@@ -1,71 +1,47 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../api/api_client.dart';
-import '../api/api_response_parser.dart';
-import '../core/constants/api_endpoints.dart';
+import '../core/storage/local_database.dart';
 import '../models/customer_model.dart';
 
 class CustomerRepository {
-  final ApiClient _apiClient;
-
-  CustomerRepository(this._apiClient);
+  final LocalDatabase _localDb = LocalDatabase.instance;
 
   Future<List<CustomerModel>> getAll({
     String? search,
     String? cardNumber,
     String? phone,
   }) async {
-    final queryParams = <String, dynamic>{};
-    if (search != null && search.isNotEmpty) queryParams['search'] = search;
-    if (cardNumber != null && cardNumber.isNotEmpty) {
-      queryParams['cardNumber'] = cardNumber;
-    }
-    if (phone != null && phone.isNotEmpty) {
-      queryParams['phone'] = phone;
-    }
-
-    final response = await _apiClient.dio.get(
-      ApiEndpoints.customers,
-      queryParameters: queryParams,
+    return await _localDb.getCustomers(
+      search: search,
+      phone: phone,
+      cardNumber: cardNumber,
     );
-
-    final rawList = ApiResponseParser.extractList(response.data, ['customers']);
-    return rawList
-        .map((item) => CustomerModel.fromJson(Map<String, dynamic>.from(item)))
-        .toList();
   }
 
   Future<CustomerModel> create(Map<String, dynamic> data) async {
-    final response = await _apiClient.dio.post(
-      ApiEndpoints.customers,
-      data: data,
-    );
-    final item = ApiResponseParser.extractMap(response.data, ['customer']);
-    return CustomerModel.fromJson(item);
+    return await _localDb.insertCustomer(data);
   }
 
   Future<CustomerModel> update(String id, Map<String, dynamic> data) async {
-    final response = await _apiClient.dio.put(
-      '${ApiEndpoints.customers}/$id',
-      data: data,
-    );
-    final item = ApiResponseParser.extractMap(response.data, ['customer']);
-    return CustomerModel.fromJson(item);
+    final updated = await _localDb.updateCustomer(id, data);
+    if (updated == null) {
+      throw Exception('Customer not found');
+    }
+    return updated;
   }
 
   Future<void> delete(String id) async {
-    await _apiClient.dio.delete('${ApiEndpoints.customers}/$id');
+    await _localDb.deleteCustomer(id);
   }
 
   Future<CustomerModel> assignLoyaltyCard(String id, String cardNumber) async {
-    final response = await _apiClient.dio.post(
-      '${ApiEndpoints.customers}/$id/assign-loyalty-card',
-      data: {'cardNumber': cardNumber},
-    );
-    final item = ApiResponseParser.extractMap(response.data, ['customer']);
-    return CustomerModel.fromJson(item);
+    final updated = await _localDb.updateCustomer(id, {'loyaltyCardNumber': cardNumber});
+    if (updated == null) {
+      throw Exception('Customer not found');
+    }
+    return updated;
   }
 }
 
 final customerRepositoryProvider = Provider<CustomerRepository>((ref) {
-  return CustomerRepository(ref.watch(apiClientProvider));
+  return CustomerRepository();
 });

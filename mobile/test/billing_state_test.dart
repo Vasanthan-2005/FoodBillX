@@ -26,9 +26,9 @@ void main() {
     expect(state.subtotal, 200);
     expect(state.totalDiscount, 30);
     expect(state.subtotalAfterDiscount, 170);
-    expect(state.gstAmount, closeTo(8.5, 0.001));
+    expect(state.gstAmount, 0.0);
     expect(state.serviceChargeAmount, 17);
-    expect(state.grandTotal, 196);
+    expect(state.grandTotal, 187);
   });
 
   test('discounts cannot make the taxable subtotal negative', () {

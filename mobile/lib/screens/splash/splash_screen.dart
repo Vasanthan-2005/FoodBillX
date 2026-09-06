@@ -26,27 +26,23 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   Future<void> _startInitialization() async {
     final startTime = DateTime.now();
 
-    // Trigger central bootstrap data fetch from backend
-    final success =
-        await ref.read(bootstrapProvider.notifier).loadBootstrap();
+    // Initialize local database & quiet sync check in background
+    await ref.read(bootstrapProvider.notifier).initializeLocalAndOptionalSync();
 
-    // Ensure smooth visual transition (minimum 1200ms)
+    // Smooth branding visual transition (minimum 800ms)
     final elapsed = DateTime.now().difference(startTime).inMilliseconds;
-    if (elapsed < 1200) {
-      await Future.delayed(Duration(milliseconds: 1200 - elapsed));
+    if (elapsed < 800) {
+      await Future.delayed(Duration(milliseconds: 800 - elapsed));
     }
 
     if (!mounted) return;
 
-    if (success) {
-      final pinState = ref.read(pinAuthProvider);
-      if (pinState.mode == PinFlowMode.unlocked) {
-        context.go('/home');
-      } else {
-        context.go('/pin');
-      }
+    // Launch immediately into the app from local database
+    final pinState = ref.read(pinAuthProvider);
+    if (pinState.mode == PinFlowMode.unlocked) {
+      context.go('/home');
     } else {
-      context.go('/network-error');
+      context.go('/pin');
     }
   }
 
@@ -71,13 +67,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                       gradient: AppColors.primaryGradient,
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withAlpha(160),
+                          color: const Color.fromARGB(255, 232, 228, 225).withAlpha(160),
                           blurRadius: 36,
                           spreadRadius: 4,
                           offset: const Offset(0, 8),
                         ),
                         BoxShadow(
-                          color: AppColors.primary.withAlpha(90),
+                          color: const Color.fromARGB(255, 255, 187, 0).withAlpha(90),
                           blurRadius: 18,
                           spreadRadius: 1,
                         ),
@@ -106,10 +102,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   )
                       .animate()
                       .scale(
-                        duration: 700.ms,
+                        duration: 600.ms,
                         curve: Curves.easeOutBack,
                       )
-                      .fade(duration: 400.ms),
+                      .fade(duration: 350.ms),
 
                   const SizedBox(height: 24),
 
@@ -123,7 +119,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                     ),
                   )
                       .animate()
-                      .fade(delay: 200.ms, duration: 500.ms)
+                      .fade(delay: 150.ms, duration: 400.ms)
                       .slideY(begin: 0.2, end: 0, curve: Curves.easeOutCubic),
 
                   const SizedBox(height: 8),
@@ -136,12 +132,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                       color: AppColors.primary.withAlpha(220),
                       letterSpacing: 0.6,
                     ),
-                  ).animate().fade(delay: 350.ms, duration: 500.ms),
+                  ).animate().fade(delay: 250.ms, duration: 400.ms),
                 ],
               ),
             ),
 
-            // Bottom Loading Indicator & Status Message
+            // Bottom Loading Indicator & Offline-Ready Status Message
             Positioned(
               bottom: 40,
               left: 0,
@@ -160,7 +156,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Preparing your dashboard...',
+                    'Loading local database...',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -170,7 +166,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Powered by FoodBillX',
+                    'Offline-First POS Engine',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -179,7 +175,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                     ),
                   ),
                 ],
-              ).animate().fade(delay: 500.ms, duration: 400.ms),
+              ).animate().fade(delay: 350.ms, duration: 300.ms),
             ),
           ],
         ),

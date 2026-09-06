@@ -47,7 +47,6 @@ class OrderService {
       const itemSubtotal = price * quantity;
       const itemDiscount = Math.min(dbItem.discount || 0, price) * quantity;
       const itemNet = itemSubtotal - itemDiscount;
-      const gstPercentage = dbItem.gstPercentage || 5.0;
 
       calculatedSubtotal += itemSubtotal;
       itemDiscountTotal += itemDiscount;
@@ -70,7 +69,7 @@ class OrderService {
     const serviceChargeAmount =
       subtotalAfterDiscount * serviceChargePercentage / 100;
     const grandTotal = Math.round(
-      subtotalAfterDiscount + calculatedGst + serviceChargeAmount
+      subtotalAfterDiscount + serviceChargeAmount
     );
     const orderNumber = await this.generateOrderNumber();
 

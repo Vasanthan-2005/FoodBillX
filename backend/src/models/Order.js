@@ -20,7 +20,7 @@ const orderItemSchema = new mongoose.Schema({
   },
   gstPercentage: {
     type: Number,
-    default: 5.0,
+    default: 0.0,
   },
   subtotal: {
     type: Number,

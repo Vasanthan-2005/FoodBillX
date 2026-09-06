@@ -1,72 +1,55 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../api/api_client.dart';
-import '../api/api_response_parser.dart';
-import '../core/constants/api_endpoints.dart';
+import '../core/storage/local_database.dart';
 import '../models/expense_model.dart';
 
 class ExpenseRepository {
-  final ApiClient _apiClient;
-
-  ExpenseRepository(this._apiClient);
+  final LocalDatabase _localDb = LocalDatabase.instance;
 
   Future<List<ExpenseModel>> getAll({
     DateTime? startDate,
     DateTime? endDate,
     String? category,
   }) async {
-    final queryParams = <String, dynamic>{};
-    if (category != null && category.isNotEmpty) {
-      queryParams['category'] = category;
-    }
-    if (startDate != null) {
-      queryParams['startDate'] = startDate.toIso8601String();
-    }
-    if (endDate != null) {
-      queryParams['endDate'] = endDate.toIso8601String();
-    }
-
-    final response = await _apiClient.dio.get(
-      ApiEndpoints.expenses,
-      queryParameters: queryParams,
+    return await _localDb.getExpenses(
+      category: category,
+      startDate: startDate,
+      endDate: endDate,
     );
-
-    final rawList = ApiResponseParser.extractList(response.data, ['expenses']);
-    return rawList
-        .map((item) => ExpenseModel.fromJson(Map<String, dynamic>.from(item)))
-        .toList();
   }
 
   Future<ExpenseModel> create(Map<String, dynamic> data) async {
-    final response = await _apiClient.dio.post(
-      ApiEndpoints.expenses,
-      data: data,
-    );
-    final item = ApiResponseParser.extractMap(response.data, ['expense']);
-    return ExpenseModel.fromJson(item);
+    return await _localDb.insertExpense(data);
   }
 
   Future<ExpenseModel> update(String id, Map<String, dynamic> data) async {
-    final response = await _apiClient.dio.put(
-      '${ApiEndpoints.expenses}/$id',
-      data: data,
-    );
-    final item = ApiResponseParser.extractMap(response.data, ['expense']);
-    return ExpenseModel.fromJson(item);
+    final updated = await _localDb.updateExpense(id, data);
+    if (updated == null) {
+      throw Exception('Expense not found');
+    }
+    return updated;
   }
 
   Future<void> delete(String id) async {
-    await _apiClient.dio.delete('${ApiEndpoints.expenses}/$id');
+    await _localDb.deleteExpense(id);
   }
 
   Future<double> getTodayTotal() async {
-    final now = DateTime.now();
-    final startOfDay = DateTime(now.year, now.month, now.day);
-    final endOfDay = startOfDay.add(const Duration(days: 1));
-    final expenses = await getAll(startDate: startOfDay, endDate: endOfDay);
-    return expenses.fold<double>(0.0, (sum, e) => sum + e.amount);
+    return await _localDb.getTodayExpenseTotal();
+  }
+
+  Future<double> getMonthlyTotal(DateTime monthDate) async {
+    return await _localDb.getMonthlyExpenseTotal(monthDate);
+  }
+
+  Future<double> getMonthlyBudget(String monthKey) async {
+    return await _localDb.getMonthlyBudget(monthKey);
+  }
+
+  Future<void> setMonthlyBudget(String monthKey, double amount) async {
+    await _localDb.setMonthlyBudget(monthKey, amount);
   }
 }
 
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
-  return ExpenseRepository(ref.watch(apiClientProvider));
+  return ExpenseRepository();
 });

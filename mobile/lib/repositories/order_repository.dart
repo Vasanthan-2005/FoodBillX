@@ -1,13 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../api/api_client.dart';
-import '../api/api_response_parser.dart';
-import '../core/constants/api_endpoints.dart';
+import '../core/storage/local_database.dart';
 import '../models/order_model.dart';
 
 class OrderRepository {
-  final ApiClient _apiClient;
-
-  OrderRepository(this._apiClient);
+  final LocalDatabase _localDb = LocalDatabase.instance;
 
   Future<List<OrderModel>> getAll({
     DateTime? startDate,
@@ -17,32 +13,14 @@ class OrderRepository {
     int limit = 100,
     int offset = 0,
   }) async {
-    final queryParams = <String, dynamic>{
-      'limit': limit,
-      'offset': offset,
-    };
-    if (paymentMethod != null && paymentMethod.isNotEmpty) {
-      queryParams['paymentMethod'] = paymentMethod;
-    }
-    if (status != null && status.isNotEmpty) {
-      queryParams['status'] = status;
-    }
-    if (startDate != null) {
-      queryParams['startDate'] = startDate.toIso8601String();
-    }
-    if (endDate != null) {
-      queryParams['endDate'] = endDate.toIso8601String();
-    }
-
-    final response = await _apiClient.dio.get(
-      ApiEndpoints.orders,
-      queryParameters: queryParams,
+    return await _localDb.getOrders(
+      startDate: startDate,
+      endDate: endDate,
+      paymentMethod: paymentMethod,
+      status: status,
+      limit: limit,
+      offset: offset,
     );
-
-    final rawList = ApiResponseParser.extractList(response.data, ['orders']);
-    return rawList
-        .map((item) => OrderModel.fromJson(Map<String, dynamic>.from(item)))
-        .toList();
   }
 
   Future<OrderModel> create({
@@ -60,37 +38,43 @@ class OrderRepository {
     required String paymentMethod,
     String notes = '',
   }) async {
-    final payload = {
-      if (orderNumber != null && orderNumber.isNotEmpty) 'orderNumber': orderNumber,
-      'customerId': customerServerId,
-      'customerName': customerName,
-      'customerPhone': customerPhone,
-      'loyaltyCardNumber': loyaltyCardNumber,
-      'paymentMethod': paymentMethod,
-      'discountAmount': discountAmount,
-      'serviceChargeAmount': serviceChargeAmount,
-      'items': items.map((i) => i.toJson()).toList(),
-      'notes': notes,
-    };
-
-    final response = await _apiClient.dio.post(
-      ApiEndpoints.orders,
-      data: payload,
+    return await _localDb.insertOrder(
+      orderNumber: orderNumber,
+      customerId: customerServerId,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      loyaltyCardNumber: loyaltyCardNumber,
+      items: items,
+      subtotal: subtotal,
+      discountAmount: discountAmount,
+      gstAmount: gstAmount,
+      serviceChargeAmount: serviceChargeAmount,
+      grandTotal: grandTotal,
+      paymentMethod: paymentMethod,
+      notes: notes,
     );
-    final rawItem = ApiResponseParser.extractMap(response.data, ['order']);
-    return OrderModel.fromJson(rawItem);
   }
 
   Future<OrderModel> refund(String orderId) async {
-    final response = await _apiClient.dio.post(
-      '${ApiEndpoints.orders}/$orderId/refund',
-    );
-    final rawItem = ApiResponseParser.extractMap(response.data, ['order']);
-    return OrderModel.fromJson(rawItem);
+    final refunded = await _localDb.refundOrder(orderId);
+    if (refunded == null) {
+      throw Exception('Order not found');
+    }
+    return refunded;
   }
 
   Future<void> delete(String orderId) async {
-    await _apiClient.dio.delete('${ApiEndpoints.orders}/$orderId');
+    final db = await _localDb.database;
+    await db.update(
+      'orders',
+      {
+        'deleted_at': DateTime.now().toIso8601String(),
+        'sync_status': 'pendingDelete',
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [orderId],
+    );
   }
 
   Future<List<OrderModel>> getBetween(DateTime start, DateTime end) async {
@@ -99,5 +83,5 @@ class OrderRepository {
 }
 
 final orderRepositoryProvider = Provider<OrderRepository>((ref) {
-  return OrderRepository(ref.watch(apiClientProvider));
+  return OrderRepository();
 });
