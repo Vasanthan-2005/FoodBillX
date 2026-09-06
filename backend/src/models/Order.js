@@ -2,8 +2,9 @@ const mongoose = require('mongoose');
 
 const orderItemSchema = new mongoose.Schema({
   menuItem: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.Mixed,
     ref: 'MenuItem',
+    default: null,
   },
   name: {
     type: String,
@@ -40,8 +41,9 @@ const orderSchema = new mongoose.Schema(
       unique: true,
     },
     customer: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.Mixed,
       ref: 'Customer',
+      default: null,
     },
     customerName: {
       type: String,

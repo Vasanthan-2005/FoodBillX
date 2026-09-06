@@ -54,13 +54,30 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
   SyncNotifier(this._syncManager, this._connectivity, this._ref)
       : super(const SyncState()) {
-    refreshStatus();
-    _connSub = _connectivity.onConnectivityChanged.listen((isOnline) {
+    refreshStatus().then((_) {
+      autoSyncIfOnline();
+    });
+    _connSub = _connectivity.onConnectivityChanged.listen((isOnline) async {
       state = state.copyWith(isOffline: !isOnline);
       if (isOnline) {
-        refreshStatus();
+        await refreshStatus();
+        if (state.pendingCount > 0 && !state.isSyncing) {
+          uploadToCloud();
+        }
       }
     });
+  }
+
+  Future<void> autoSyncIfOnline() async {
+    try {
+      if (state.isSyncing) return;
+      final isOnline = await _connectivity.isConnected();
+      if (!isOnline) return;
+      final pendingCount = await LocalDatabase.instance.getPendingChangesCount();
+      if (pendingCount > 0 && !state.isSyncing) {
+        uploadToCloud();
+      }
+    } catch (_) {}
   }
 
   Future<void> refreshStatus() async {

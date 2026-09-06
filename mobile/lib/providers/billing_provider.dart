@@ -10,6 +10,7 @@ import 'customer_provider.dart';
 import 'dashboard_provider.dart';
 import 'orders_provider.dart';
 import 'settings_provider.dart';
+import 'sync_provider.dart';
 
 class CheckoutResult {
   final String orderNumber;
@@ -357,6 +358,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
       }
 
       clearCart();
+      _ref.read(syncProvider.notifier).autoSyncIfOnline();
 
       try {
         final pdfFile = await PdfInvoiceHelper.generateInvoicePdf(

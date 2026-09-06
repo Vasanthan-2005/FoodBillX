@@ -1417,6 +1417,22 @@ class LocalDatabase {
     for (final r in itemRows) {
       final status = r['sync_status'] as String;
       final opType = status == 'pendingDelete' ? 'delete' : (status == 'pendingCreate' ? 'create' : 'update');
+
+      // Resolve category server_id if available
+      String categoryRef = r['category_id'] as String;
+      final catRows = await db.query(
+        'categories',
+        columns: ['server_id'],
+        where: 'id = ?',
+        whereArgs: [categoryRef],
+        limit: 1,
+      );
+      if (catRows.isNotEmpty &&
+          catRows.first['server_id'] != null &&
+          (catRows.first['server_id'] as String).isNotEmpty) {
+        categoryRef = catRows.first['server_id'] as String;
+      }
+
       ops.add(SyncQueueItem(
         operationId: _uuid.v4(),
         entityType: 'menuItem',
@@ -1424,7 +1440,7 @@ class LocalDatabase {
         localId: r['id'] as String,
         serverId: r['server_id'] as String?,
         payload: {
-          'category': r['category_id'],
+          'category': categoryRef,
           'name': r['name'],
           'description': r['description'],
           'price': r['price'],
@@ -1489,9 +1505,55 @@ class LocalDatabase {
     for (final r in orderRows) {
       final status = r['sync_status'] as String;
       final opType = status == 'pendingDelete' ? 'delete' : (status == 'pendingCreate' ? 'create' : 'update');
+
+      // Resolve customer server_id if present
+      String? customerRef;
+      final rawCustId = r['customer_id'] as String?;
+      if (rawCustId != null && rawCustId.isNotEmpty) {
+        final custRows = await db.query(
+          'customers',
+          columns: ['server_id'],
+          where: 'id = ?',
+          whereArgs: [rawCustId],
+          limit: 1,
+        );
+        if (custRows.isNotEmpty &&
+            custRows.first['server_id'] != null &&
+            (custRows.first['server_id'] as String).isNotEmpty) {
+          customerRef = custRows.first['server_id'] as String;
+        } else {
+          customerRef = rawCustId;
+        }
+      }
+
       List items = [];
       try {
-        items = jsonDecode(r['items_json'] as String? ?? '[]');
+        final rawItems = jsonDecode(r['items_json'] as String? ?? '[]');
+        if (rawItems is List) {
+          for (final rawIt in rawItems) {
+            if (rawIt is Map<String, dynamic>) {
+              final itCopy = Map<String, dynamic>.from(rawIt);
+              final rawMenuId = itCopy['menuItem']?.toString();
+              if (rawMenuId != null && rawMenuId.isNotEmpty) {
+                final mRows = await db.query(
+                  'menu_items',
+                  columns: ['server_id'],
+                  where: 'id = ?',
+                  whereArgs: [rawMenuId],
+                  limit: 1,
+                );
+                if (mRows.isNotEmpty &&
+                    mRows.first['server_id'] != null &&
+                    (mRows.first['server_id'] as String).isNotEmpty) {
+                  itCopy['menuItem'] = mRows.first['server_id'] as String;
+                }
+              }
+              items.add(itCopy);
+            } else {
+              items.add(rawIt);
+            }
+          }
+        }
       } catch (_) {}
 
       ops.add(SyncQueueItem(
@@ -1502,7 +1564,8 @@ class LocalDatabase {
         serverId: r['server_id'] as String?,
         payload: {
           'orderNumber': r['order_number'],
-          'customerId': r['customer_id'],
+          'customer': customerRef,
+          'customerId': customerRef,
           'customerName': r['customer_name'],
           'customerPhone': r['customer_phone'],
           'loyaltyCardNumber': r['loyalty_card_number'],

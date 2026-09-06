@@ -16,6 +16,7 @@ import 'reports/orders_screen.dart';
 import 'settings/settings_screen.dart';
 
 import '../providers/dashboard_provider.dart';
+import '../providers/sync_provider.dart';
 
 class HomeShellScreen extends ConsumerStatefulWidget {
   final int initialIndex;
@@ -26,13 +27,14 @@ class HomeShellScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeShellScreen> createState() => _HomeShellScreenState();
 }
 
-class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
+class _HomeShellScreenState extends ConsumerState<HomeShellScreen> with WidgetsBindingObserver {
   late int _currentIndex;
   late final List<Widget?> _pages;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _currentIndex = widget.initialIndex;
     _pages = List<Widget?>.filled(5, null);
     _pages[_currentIndex] = _buildPage(_currentIndex);
@@ -44,6 +46,20 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
       // Quietly evaluate if daily 8 PM sync is due and run in background
       BackgroundSyncService.checkAndRunForegroundEveningSync(ref.read(syncManagerProvider));
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      BackgroundSyncService.checkAndRunForegroundEveningSync(ref.read(syncManagerProvider));
+      ref.read(syncProvider.notifier).autoSyncIfOnline();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   void _onSelectTab(int index) {

@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const menuItemSchema = new mongoose.Schema(
   {
     category: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.Mixed,
       ref: 'Category',
       required: [true, 'Category is required'],
     },

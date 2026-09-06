@@ -18,7 +18,7 @@ class LiveBadgeWidget extends ConsumerWidget {
 
     final Color badgeColor = isOffline
         ? Colors.grey
-        : (isSyncing || pending > 0
+        : (isSyncing
             ? Colors.amber.shade800
             : Colors.green);
 
@@ -26,9 +26,7 @@ class LiveBadgeWidget extends ConsumerWidget {
         ? 'Offline'
         : (isSyncing
             ? 'Syncing'
-            : (pending > 0
-                ? '$pending Pending'
-                : (isLive ? 'Live' : 'Ready')));
+            : (isLive ? 'Live' : 'Ready'));
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),

@@ -4,7 +4,7 @@ const syncReceiptSchema = new mongoose.Schema(
   {
     operationId: { type: String, required: true, unique: true, index: true },
     entityType: { type: String, required: true },
-    localId: { type: Number, required: true },
+    localId: { type: mongoose.Schema.Types.Mixed, required: true },
     serverId: { type: String, default: null },
   },
   { timestamps: true }

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
 const Customer = require('../models/Customer');
@@ -100,6 +101,68 @@ class SyncService {
         }
 
         let resultServerId = serverId || null;
+
+        // Foreign key resolution for offline resilience
+        if (entityType === 'menuItem' && payload) {
+          if (payload.category) {
+            if (mongoose.Types.ObjectId.isValid(payload.category)) {
+              payload.category = new mongoose.Types.ObjectId(payload.category);
+            } else {
+              const receipt = await SyncReceipt.findOne({
+                entityType: 'category',
+                localId: payload.category.toString(),
+              });
+              if (receipt && receipt.serverId && mongoose.Types.ObjectId.isValid(receipt.serverId)) {
+                payload.category = new mongoose.Types.ObjectId(receipt.serverId);
+              } else {
+                const firstCat = await Category.findOne();
+                if (firstCat) {
+                  payload.category = firstCat._id;
+                }
+              }
+            }
+          }
+        } else if (entityType === 'order' && payload) {
+          const rawCust = payload.customer || payload.customerId;
+          if (rawCust) {
+            if (mongoose.Types.ObjectId.isValid(rawCust)) {
+              payload.customer = new mongoose.Types.ObjectId(rawCust);
+            } else {
+              const receipt = await SyncReceipt.findOne({
+                entityType: 'customer',
+                localId: rawCust.toString(),
+              });
+              payload.customer = (receipt && mongoose.Types.ObjectId.isValid(receipt.serverId))
+                ? new mongoose.Types.ObjectId(receipt.serverId)
+                : null;
+            }
+          } else {
+            payload.customer = null;
+          }
+          delete payload.customerId;
+
+          if (Array.isArray(payload.items)) {
+            for (const item of payload.items) {
+              if (item.menuItem) {
+                if (mongoose.Types.ObjectId.isValid(item.menuItem)) {
+                  item.menuItem = new mongoose.Types.ObjectId(item.menuItem);
+                } else {
+                  const receipt = await SyncReceipt.findOne({
+                    entityType: 'menuItem',
+                    localId: item.menuItem.toString(),
+                  });
+                  if (receipt && mongoose.Types.ObjectId.isValid(receipt.serverId)) {
+                    item.menuItem = new mongoose.Types.ObjectId(receipt.serverId);
+                  } else {
+                    const foundItem = await MenuItem.findOne({ name: item.name });
+                    item.menuItem = foundItem ? foundItem._id : null;
+                  }
+                }
+              }
+            }
+          }
+        }
+
         if (operationType === 'create') {
           // Idempotent matching prevents duplicate creates when a response is lost
           // and the mobile outbox retries the same logical operation.
