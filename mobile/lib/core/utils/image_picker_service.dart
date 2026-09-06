@@ -7,8 +7,7 @@ class ImagePickerService {
 
   /// Picks and compresses an image from Camera or Gallery, then saves to local disk.
   /// Returns a relative image code string suitable for database storage.
-  static Future<String?> pickAndCompressImage(
-    BuildContext context, {
+  static Future<String?> pickAndCompressImage({
     required ImageSource source,
     String? oldImageCode,
   }) async {
@@ -33,46 +32,95 @@ class ImagePickerService {
     }
   }
 
-  /// Shows a modal sheet to select between Camera and Gallery.
+  /// Shows a dialog to select between Camera and Gallery.
+  /// Uses showDialog instead of nested showModalBottomSheet to avoid
+  /// conflicting modal route transitions and framework assertion failures.
   static Future<String?> showImageSourceDialog(BuildContext context) async {
-    final source = await showModalBottomSheet<ImageSource?>(
+    final source = await showDialog<ImageSource?>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Select Dish Image',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.photo_camera_rounded, color: Colors.amber),
+              SizedBox(width: 10),
+              Text(
+                'Select Dish Image',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withAlpha(isDark ? 50 : 30),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt_rounded,
+                    color: Colors.blue,
+                    size: 22,
                   ),
                 ),
-                const SizedBox(height: 16),
-                ListTile(
-                  leading: const Icon(Icons.camera_alt_rounded, color: Colors.blue),
-                  title: const Text('Take Photo (Camera)'),
-                  onTap: () => Navigator.pop(ctx, ImageSource.camera),
+                title: const Text(
+                  'Take Photo (Camera)',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.photo_library_rounded, color: Colors.purple),
-                  title: const Text('Choose from Gallery'),
-                  onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+                onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-            ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withAlpha(isDark ? 50 : 30),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.photo_library_rounded,
+                    color: Colors.purple,
+                    size: 22,
+                  ),
+                ),
+                title: const Text(
+                  'Choose from Gallery',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+                onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
+              ),
+            ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancel'),
+            ),
+          ],
         );
       },
     );
 
-    if (source == null || !context.mounted) return null;
-    return pickAndCompressImage(context, source: source);
+    if (source == null) return null;
+
+    // Settle the dialog route pop animation before launching the native activity
+    await Future.delayed(const Duration(milliseconds: 120));
+
+    return pickAndCompressImage(source: source);
   }
 }

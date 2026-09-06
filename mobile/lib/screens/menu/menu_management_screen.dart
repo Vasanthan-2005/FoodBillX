@@ -126,7 +126,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                         existingItem == null
                             ? 'Add Food Item'
                             : 'Edit Food Item',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        style: Theme.of(modalCtx).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -138,6 +138,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                             ? null
                             : () async {
                                 final picked = await ImagePickerService.showImageSourceDialog(modalCtx);
+                                if (!modalCtx.mounted) return;
                                 if (picked != null) {
                                   setModalState(() => selectedImage = picked);
                                 }
@@ -145,7 +146,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).brightness == Brightness.dark
+                            color: Theme.of(modalCtx).brightness == Brightness.dark
                                 ? AppColors.darkCard
                                 : AppColors.lightBackground,
                             borderRadius: BorderRadius.circular(16),

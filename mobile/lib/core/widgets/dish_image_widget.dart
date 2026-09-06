@@ -45,6 +45,7 @@ class _DishImageWidgetState extends State<DishImageWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageUrl != widget.imageUrl) {
       _resolvedLocalFile = null;
+      _lastResolvedUrl = null;
       _tryResolveLocalFile();
     }
   }
