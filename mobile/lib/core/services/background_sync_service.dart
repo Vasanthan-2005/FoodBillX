@@ -18,7 +18,7 @@ const String kBackgroundDailySyncTask = 'com.foodbillx.daily_sync_task';
 //   - For 10:30 PM testing:  kAutoSyncTargetHour = 22; kAutoSyncTargetMinute = 30;
 //   - For 8:00 PM default:   kAutoSyncTargetHour = 20; kAutoSyncTargetMinute = 0;
 const int kAutoSyncTargetHour = 22; // 24-hour format (22 = 10 PM, 20 = 8 PM)
-const int kAutoSyncTargetMinute = 40; // Minute (0 - 59)
+const int kAutoSyncTargetMinute = 53; // Minute (0 - 59)
 
 // When testing, set this to true so you can trigger tests repeatedly
 // without being blocked by the "already synced today" check.
