@@ -38,6 +38,7 @@ class ImagePickerService {
   static Future<String?> showImageSourceDialog(BuildContext context) async {
     final source = await showDialog<ImageSource?>(
       context: context,
+      useRootNavigator: true,
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return AlertDialog(

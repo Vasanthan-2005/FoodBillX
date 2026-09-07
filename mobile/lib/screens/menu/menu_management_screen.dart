@@ -5,6 +5,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/widgets/empty_state_widget.dart';
+import '../../models/category_model.dart';
 import '../../models/menu_item_model.dart';
 import '../../providers/menu_provider.dart';
 import '../../core/utils/local_image_storage_service.dart';
@@ -46,7 +47,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
   }
 
   // ── Menu Item Form ───────────────────────────────────────────────
-  void _showItemFormDialog([MenuItemModel? existingItem]) {
+  Future<void> _showItemFormDialog([MenuItemModel? existingItem]) async {
     final categories = ref.read(menuProvider).categories;
 
     if (existingItem == null && categories.isEmpty) {
@@ -81,324 +82,48 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
       return;
     }
 
-    final nameController = TextEditingController(
-      text: existingItem?.name ?? '',
-    );
-    final priceController = TextEditingController(
-      text: existingItem != null ? existingItem.price.toString() : '',
-    );
-    final discountController = TextEditingController(
-      text: existingItem?.discount.toString() ?? '0',
-    );
-
-    String selectedCatId =
-        existingItem?.categoryId ??
-        (categories.isNotEmpty ? categories.first.id : '');
-    bool isVeg = existingItem?.isVeg ?? true;
-    String selectedImage = existingItem?.image ?? '';
-    final formKey = GlobalKey<FormState>();
-    bool isSaving = false;
-
-    showModalBottomSheet(
+    final resultItem = await showModalBottomSheet<MenuItemModel>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (modalCtx, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 20,
-                left: 20,
-                right: 20,
-                top: 24,
-              ),
-              child: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        existingItem == null
-                            ? 'Add Food Item'
-                            : 'Edit Food Item',
-                        style: Theme.of(modalCtx).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+      builder: (ctx) => _ItemFormSheet(
+        categories: categories,
+        existingItem: existingItem,
+      ),
+    );
 
-                      // Dish Image Selector Card
-                      InkWell(
-                        onTap: isSaving
-                            ? null
-                            : () async {
-                                final picked = await ImagePickerService.showImageSourceDialog(modalCtx);
-                                if (!modalCtx.mounted) return;
-                                if (picked != null) {
-                                  setModalState(() => selectedImage = picked);
-                                }
-                              },
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(modalCtx).brightness == Brightness.dark
-                                ? AppColors.darkCard
-                                : AppColors.lightBackground,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: selectedImage.isEmpty
-                                  ? Colors.grey.withAlpha(100)
-                                  : AppColors.primary,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              DishImageWidget(
-                                imageUrl: selectedImage,
-                                fallbackEmoji: isVeg ? '🥗' : '🍗',
-                                size: 48,
-                                borderRadius: 10,
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      selectedImage.isEmpty ? 'Upload Dish Image (Optional)' : 'Dish Image Attached',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                        color: selectedImage.isEmpty ? Colors.grey : null,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      selectedImage.isEmpty ? 'Tap to take camera photo or pick gallery' : 'Tap to change dish image',
-                                      style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+    if (resultItem == null || !mounted) return;
 
-                      // Category Dropdown
-                      if (categories.isNotEmpty)
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedCatId.isNotEmpty
-                              ? selectedCatId
-                              : categories.first.id,
-                          decoration: const InputDecoration(
-                            labelText: 'Category *',
-                          ),
-                          items: categories
-                              .map(
-                                (c) => DropdownMenuItem(
-                                  value: c.id,
-                                  child: Text(c.name),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: isSaving
-                              ? null
-                              : (val) {
-                                  if (val != null) {
-                                    setModalState(() => selectedCatId = val);
-                                  }
-                                },
-                        ),
-                      const SizedBox(height: 12),
-
-                      // Item Name
-                      TextFormField(
-                        controller: nameController,
-                        enabled: !isSaving,
-                        decoration: const InputDecoration(
-                          labelText: 'Item Name *',
-                          hintText: 'Paneer Butter Masala',
-                        ),
-                        validator: (val) => val == null || val.trim().isEmpty
-                            ? 'Enter item name'
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Price & Discount
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: priceController,
-                              enabled: !isSaving,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Price *',
-                              ),
-                              validator: (val) {
-                                if (val == null || val.trim().isEmpty) {
-                                  return 'Required';
-                                }
-                                if (double.tryParse(val) == null) {
-                                  return 'Invalid';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextFormField(
-                              controller: discountController,
-                              enabled: !isSaving,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Discount (₹)',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Veg / Non-Veg toggle
-                      Row(
-                        children: [
-                          const Text('Type: '),
-                          const SizedBox(width: 8),
-                          ChoiceChip(
-                            label: const Text('🟢 Veg'),
-                            selected: isVeg,
-                            selectedColor: Colors.green.shade100,
-                            onSelected: isSaving
-                                ? null
-                                : (_) => setModalState(() => isVeg = true),
-                          ),
-                          const SizedBox(width: 8),
-                          ChoiceChip(
-                            label: const Text('🔴 Non-Veg'),
-                            selected: !isVeg,
-                            selectedColor: Colors.red.shade100,
-                            onSelected: isSaving
-                                ? null
-                                : (_) => setModalState(() => isVeg = false),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-
-                      ElevatedButton(
-                        onPressed: isSaving
-                            ? null
-                            : () async {
-                                if (!formKey.currentState!.validate()) return;
-                                setModalState(() => isSaving = true);
-
-                                final String finalImageUrl = selectedImage.trim();
-
-                                final item = MenuItemModel(
-                                  id: existingItem?.id ?? '',
-                                  categoryId: selectedCatId,
-                                  name: nameController.text.trim(),
-                                  description: '',
-                                  price: double.parse(priceController.text.trim()),
-                                  discount:
-                                      double.tryParse(
-                                        discountController.text.trim(),
-                                      ) ??
-                                      0.0,
-                                  gstPercentage: 0.0,
-                                  image: finalImageUrl,
-                                  isVeg: isVeg,
-                                  isAvailable: existingItem?.isAvailable ?? true,
-                                );
-
-                                bool ok = false;
-                                try {
-                                  if (existingItem == null) {
-                                    ok = await ref
-                                        .read(menuProvider.notifier)
-                                        .createMenuItem(item);
-                                  } else {
-                                    ok = await ref
-                                        .read(menuProvider.notifier)
-                                        .updateMenuItem(item);
-
-                                    // Clean up old local image if photo was changed
-                                    if (ok &&
-                                        existingItem.image.isNotEmpty &&
-                                        existingItem.image != finalImageUrl) {
-                                      await LocalImageStorageService.deleteDishImage(
-                                        existingItem.image,
-                                      );
-                                    }
-                                  }
-                                } catch (_) {
-                                  ok = false;
-                                }
-
-                                if (modalCtx.mounted) {
-                                  Navigator.pop(modalCtx);
-                                }
-
-                                if (mounted) {
-                                  if (ok) {
-                                    await ref
-                                        .read(menuProvider.notifier)
-                                        .loadCategoriesAndItems(forceSpinner: false);
-                                    if (mounted) {
-                                      SnackbarUtils.showSuccess(
-                                        context,
-                                        existingItem == null
-                                            ? 'Dish "${item.name}" created successfully!'
-                                            : 'Dish "${item.name}" updated successfully!',
-                                      );
-                                    }
-                                  } else {
-                                    SnackbarUtils.showError(
-                                      context,
-                                      'Failed to save dish. Please check database connection.',
-                                    );
-                                  }
-                                }
-                              },
-                        child: isSaving
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Text(
-                                existingItem == null ? 'ADD DISH' : 'SAVE CHANGES',
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    ).whenComplete(() {
-        nameController.dispose();
-        priceController.dispose();
-        discountController.dispose();
-      });
+    final notifier = ref.read(menuProvider.notifier);
+    bool ok;
+    if (existingItem == null) {
+      ok = await notifier.createMenuItem(resultItem);
+    } else {
+      ok = await notifier.updateMenuItem(resultItem);
+      if (ok &&
+          existingItem.image.isNotEmpty &&
+          existingItem.image != resultItem.image) {
+        await LocalImageStorageService.deleteDishImage(existingItem.image);
+      }
     }
+
+    if (!mounted) return;
+    if (ok) {
+      SnackbarUtils.showSuccess(
+        context,
+        existingItem == null
+            ? 'Dish "${resultItem.name}" created successfully!'
+            : 'Dish "${resultItem.name}" updated successfully!',
+      );
+    } else {
+      SnackbarUtils.showError(
+        context,
+        'Failed to save dish. Please check database connection.',
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -980,6 +705,284 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
                   },
                 )
               : null,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Menu Item Form Bottom Sheet (Clean Lifecycle & Isolated State) ──
+class _ItemFormSheet extends StatefulWidget {
+  final List<CategoryModel> categories;
+  final MenuItemModel? existingItem;
+
+  const _ItemFormSheet({
+    required this.categories,
+    this.existingItem,
+  });
+
+  @override
+  State<_ItemFormSheet> createState() => _ItemFormSheetState();
+}
+
+class _ItemFormSheetState extends State<_ItemFormSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _priceController;
+  late final TextEditingController _discountController;
+  late String _selectedCatId;
+  late bool _isVeg;
+  late String _selectedImage;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.existingItem?.name ?? '');
+    _priceController = TextEditingController(
+      text: widget.existingItem != null ? widget.existingItem!.price.toString() : '',
+    );
+    _discountController = TextEditingController(
+      text: widget.existingItem?.discount.toString() ?? '0',
+    );
+    _selectedCatId = widget.existingItem?.categoryId ??
+        (widget.categories.isNotEmpty ? widget.categories.first.id : '');
+    _isVeg = widget.existingItem?.isVeg ?? true;
+    _selectedImage = widget.existingItem?.image ?? '';
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _priceController.dispose();
+    _discountController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+
+    // Unfocus any active keyboard before popping to prevent IME/render conflicts
+    FocusScope.of(context).unfocus();
+
+    final item = MenuItemModel(
+      id: widget.existingItem?.id ?? '',
+      categoryId: _selectedCatId,
+      name: _nameController.text.trim(),
+      description: '',
+      price: double.parse(_priceController.text.trim()),
+      discount: double.tryParse(_discountController.text.trim()) ?? 0.0,
+      gstPercentage: 0.0,
+      image: _selectedImage.trim(),
+      isVeg: _isVeg,
+      isAvailable: widget.existingItem?.isAvailable ?? true,
+    );
+
+    Navigator.of(context).pop(item);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        left: 20,
+        right: 20,
+        top: 24,
+      ),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.existingItem == null ? 'Add Food Item' : 'Edit Food Item',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Dish Image Selector Card
+              InkWell(
+                onTap: () async {
+                  FocusScope.of(context).unfocus();
+                  final picked = await ImagePickerService.showImageSourceDialog(context);
+                  if (!mounted) return;
+                  if (picked != null) {
+                    setState(() => _selectedImage = picked);
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkCard : AppColors.lightBackground,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _selectedImage.isEmpty
+                          ? Colors.grey.withAlpha(100)
+                          : AppColors.primary,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      DishImageWidget(
+                        imageUrl: _selectedImage,
+                        fallbackEmoji: _isVeg ? '🥗' : '🍗',
+                        size: 48,
+                        borderRadius: 10,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _selectedImage.isEmpty
+                                  ? 'Upload Dish Image (Optional)'
+                                  : 'Dish Image Attached',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: _selectedImage.isEmpty ? Colors.grey : null,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _selectedImage.isEmpty
+                                  ? 'Tap to take camera photo or pick gallery'
+                                  : 'Tap to change dish image',
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Category Dropdown
+              if (widget.categories.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedCatId.isNotEmpty
+                      ? _selectedCatId
+                      : widget.categories.first.id,
+                  decoration: const InputDecoration(
+                    labelText: 'Category *',
+                  ),
+                  items: widget.categories
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c.id,
+                          child: Text(c.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _selectedCatId = val);
+                    }
+                  },
+                ),
+              const SizedBox(height: 12),
+
+              // Item Name
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Item Name *',
+                  hintText: 'Paneer Butter Masala',
+                ),
+                validator: (val) => val == null || val.trim().isEmpty
+                    ? 'Enter item name'
+                    : null,
+              ),
+              const SizedBox(height: 12),
+
+              // Price & Discount
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _priceController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Price *',
+                      ),
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) {
+                          return 'Required';
+                        }
+                        if (double.tryParse(val) == null) {
+                          return 'Invalid';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _discountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Discount (₹)',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Veg / Non-Veg toggle
+              Row(
+                children: [
+                  const Text('Type: '),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('🟢 Veg'),
+                    selected: _isVeg,
+                    selectedColor: Colors.green.shade100,
+                    onSelected: (_) => setState(() => _isVeg = true),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('🔴 Non-Veg'),
+                    selected: !_isVeg,
+                    selectedColor: Colors.red.shade100,
+                    onSelected: (_) => setState(() => _isVeg = false),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: _submit,
+                child: Text(
+                  widget.existingItem == null ? 'ADD DISH' : 'SAVE CHANGES',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
