@@ -9,6 +9,7 @@ const settingsRoutes = require('./routes/settingsRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const authRoutes = require('./routes/authRoutes');
 const syncRoutes = require('./routes/syncRoutes');
+const { router: appRoutes, getAppVersionHandler } = require('./routes/appRoutes');
 
 const app = express();
 
@@ -43,11 +44,16 @@ const healthHandler = (req, res) => {
 app.get('/health', healthHandler);
 app.get('/api/v1/health', healthHandler);
 
+// Top-level App Version Endpoint (matching user requirement GET /api/app-version)
+app.get('/api/app-version', getAppVersionHandler);
+app.get('/api/v1/app-version', getAppVersionHandler);
+
 // Active API V1 Endpoints
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/sync', syncRoutes);
+app.use('/api/v1/app', appRoutes);
 
 // Global Error Handler
 app.use(errorHandler);

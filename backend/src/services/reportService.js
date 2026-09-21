@@ -1,7 +1,5 @@
 const Order = require('../models/Order');
-const Expense = require('../models/Expense');
 const Customer = require('../models/Customer');
-const MenuItem = require('../models/MenuItem');
 
 class ReportService {
   async getDashboardSummary() {
@@ -52,24 +50,11 @@ class ReportService {
       ]),
     ]);
 
-    // --- EXPENSES ---
-    const [todayExp, weekExp, monthExp, overallExp] = await Promise.all([
-      Expense.aggregate([
-        { $match: { $or: [{ date: { $gte: startOfDay, $lte: endOfDay } }, { createdAt: { $gte: startOfDay, $lte: endOfDay } }] } },
-        { $group: { _id: null, total: { $sum: '$amount' } } },
-      ]),
-      Expense.aggregate([
-        { $match: { $or: [{ date: { $gte: startOfWeek, $lte: endOfDay } }, { createdAt: { $gte: startOfWeek, $lte: endOfDay } }] } },
-        { $group: { _id: null, total: { $sum: '$amount' } } },
-      ]),
-      Expense.aggregate([
-        { $match: { $or: [{ date: { $gte: startOfMonth, $lte: endOfDay } }, { createdAt: { $gte: startOfMonth, $lte: endOfDay } }] } },
-        { $group: { _id: null, total: { $sum: '$amount' } } },
-      ]),
-      Expense.aggregate([
-        { $group: { _id: null, total: { $sum: '$amount' } } },
-      ]),
-    ]);
+    // --- EXPENSES (Offline-local only, default to 0 on backend) ---
+    const todayExpenseTotal = 0.0;
+    const weekExpenseTotal = 0.0;
+    const monthExpenseTotal = 0.0;
+    const overallExpenseTotal = 0.0;
 
     const todayRevenue = todayOrders[0]?.totalRevenue || 0;
     const todayOrderCount = todayOrders[0]?.count || 0;
@@ -80,11 +65,6 @@ class ReportService {
     const monthOrderCount = monthOrders[0]?.count || 0;
     const overallRevenue = overallOrders[0]?.totalRevenue || 0;
     const overallOrderCount = overallOrders[0]?.count || 0;
-
-    const todayExpenseTotal = todayExp[0]?.total || 0;
-    const weekExpenseTotal = weekExp[0]?.total || 0;
-    const monthExpenseTotal = monthExp[0]?.total || 0;
-    const overallExpenseTotal = overallExp[0]?.total || 0;
 
     const netProfitToday = todayRevenue - todayExpenseTotal;
     const weeklyProfit = weekRevenue - weekExpenseTotal;
@@ -154,10 +134,7 @@ class ReportService {
     });
 
     // --- EXPENSE ANALYTICS ---
-    const expenseBreakdown = await Expense.aggregate([
-      { $group: { _id: '$category', total: { $sum: '$amount' }, count: { $sum: 1 } } },
-      { $sort: { total: -1 } },
-    ]);
+    const expenseBreakdown = [];
 
     // --- HOURLY SALES TREND (TODAY 6 INTERVALS IN IST) ---
     const hourlyRevenueToday = [];
@@ -181,13 +158,14 @@ class ReportService {
       hourlyRevenueToday.push(slotOrder[0]?.total || 0.0);
     }
 
-    // --- DAILY SALES TREND (CURRENT WEEK: SUN -> SAT IN IST) ---
+    // --- DAILY SALES TREND (CURRENT WEEK: MON -> SUN IN IST) ---
     const recentDailyRevenue = [];
     const currentDayOfWeek = new Date(now.getTime() + tzOffsetMs).getUTCDay();
-    const sunOfWeek = new Date(startOfDay.getTime() - (currentDayOfWeek * 24 * 3600 * 1000));
+    const daysSinceMon = currentDayOfWeek === 0 ? 6 : currentDayOfWeek - 1;
+    const monOfWeek = new Date(startOfDay.getTime() - (daysSinceMon * 24 * 3600 * 1000));
 
     for (let i = 0; i < 7; i++) {
-      const dayStart = new Date(sunOfWeek.getTime() + (i * 24 * 3600 * 1000));
+      const dayStart = new Date(monOfWeek.getTime() + (i * 24 * 3600 * 1000));
       const dayEnd = new Date(dayStart.getTime() + (24 * 3600 * 1000 - 1));
 
       const dayOrder = await Order.aggregate([
@@ -382,10 +360,6 @@ class ReportService {
         { $group: { _id: null, totalRevenue: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
       ]),
       Order.countDocuments({ orderStatus: 'refunded', createdAt: { $gte: start, $lte: end } }),
-      Expense.aggregate([
-        { $match: { $or: [{ date: { $gte: start, $lte: end } }, { createdAt: { $gte: start, $lte: end } }] } },
-        { $group: { _id: null, total: { $sum: '$amount' } } },
-      ]),
       Order.aggregate([
         { $match: validOrderMatch },
         { $group: { _id: '$paymentMethod', total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
@@ -428,8 +402,8 @@ class ReportService {
     const prevRevenue = prevOrdersAgg[0]?.totalRevenue || 0;
     const prevOrdersCount = prevOrdersAgg[0]?.count || 0;
 
-    const totalExpenses = expensesAgg[0]?.total || 0;
-    const netProfit = revenue - totalExpenses;
+    const totalExpenses = 0.0;
+    const netProfit = revenue;
     const aov = ordersCount > 0 ? Math.round(revenue / ordersCount) : 0;
     const profitMargin = revenue > 0 ? Math.round((netProfit / revenue) * 100) : 0;
     const revenueGrowth = prevRevenue > 0 ? parseFloat((((revenue - prevRevenue) / prevRevenue) * 100).toFixed(1)) : 0;
@@ -466,15 +440,10 @@ class ReportService {
         { $match: { orderStatus: { $ne: 'refunded' }, createdAt: { $gte: dStart, $lte: dEnd } } },
         { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } }
       ]);
-      const dExpAgg = await Expense.aggregate([
-        { $match: { $or: [{ date: { $gte: dStart, $lte: dEnd } }, { createdAt: { $gte: dStart, $lte: dEnd } }] } },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
-      ]);
-
       const dRev = dRevAgg[0]?.total || 0;
       const dCnt = dRevAgg[0]?.count || 0;
-      const dExp = dExpAgg[0]?.total || 0;
-      const dProf = dRev - dExp;
+      const dExp = 0.0;
+      const dProf = dRev;
 
       const dateLabel = curr.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
       dailyTrend.push({

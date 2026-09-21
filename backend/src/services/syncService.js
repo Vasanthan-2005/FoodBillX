@@ -1,9 +1,5 @@
 const mongoose = require('mongoose');
-const Category = require('../models/Category');
-const MenuItem = require('../models/MenuItem');
 const Customer = require('../models/Customer');
-const ExpenseCategory = require('../models/ExpenseCategory');
-const Expense = require('../models/Expense');
 const BusinessSettings = require('../models/BusinessSettings');
 const Order = require('../models/Order');
 const SyncReceipt = require('../models/SyncReceipt');
@@ -12,7 +8,7 @@ const recordSyncDeletion = require('../utils/recordSyncDeletion');
 
 class SyncService {
   /**
-   * Pull all records updated after `sinceDate` across all core collections.
+   * Pull all records updated after `sinceDate` across active core collections (Orders & Customers).
    */
   async pullChanges(sinceDate) {
     const syncStartedAt = new Date();
@@ -21,26 +17,24 @@ class SyncService {
       : { updatedAt: { $lte: syncStartedAt } };
 
     const tombstoneFilter = sinceDate
-      ? { deletedAt: { $gt: new Date(sinceDate), $lte: syncStartedAt } }
-      : { deletedAt: { $lte: syncStartedAt } };
-    const [categories, menuItems, customers, expenseCategories, expenses, orders, settings, tombstones] =
-      await Promise.all([
-        Category.find(filter),
-        MenuItem.find(filter).populate('category', '_id name'),
-        Customer.find(filter),
-        ExpenseCategory.find(filter),
-        Expense.find(filter),
-        Order.find(filter),
-        BusinessSettings.findOne(),
-        SyncTombstone.find(tombstoneFilter),
-      ]);
+      ? { 
+          deletedAt: { $gt: new Date(sinceDate), $lte: syncStartedAt },
+          entityType: { $in: ['customer', 'order', 'settings'] }
+        }
+      : { 
+          deletedAt: { $lte: syncStartedAt },
+          entityType: { $in: ['customer', 'order', 'settings'] }
+        };
+
+    const [customers, orders, settings, tombstones] = await Promise.all([
+      Customer.find(filter),
+      Order.find(filter),
+      BusinessSettings.findOne(),
+      SyncTombstone.find(tombstoneFilter),
+    ]);
 
     return {
-      categories,
-      menuItems,
       customers,
-      expenseCategories,
-      expenses,
       orders,
       settings,
       tombstones,
@@ -49,7 +43,7 @@ class SyncService {
   }
 
   /**
-   * Process a batch of push operations sent by the mobile app.
+   * Process a batch of push operations sent by the mobile app (Orders & Customers only).
    */
   async pushBatch(operations = []) {
     const results = [];
@@ -59,124 +53,83 @@ class SyncService {
       let model;
 
       switch (entityType) {
-        case 'category':
-          model = Category;
-          break;
-        case 'menuItem':
-          model = MenuItem;
-          break;
         case 'order':
           model = Order;
           break;
         case 'customer':
           model = Customer;
           break;
-        case 'expense':
-          model = Expense;
-          break;
-        case 'expenseCategory':
-          model = ExpenseCategory;
-          break;
         case 'settings':
           model = BusinessSettings;
           break;
         default:
+          // Ignore non-essential entities (categories, menu items, expenses) safely
+          results.push({
+            operationId,
+            entityType,
+            operationType,
+            localId,
+            serverId: serverId || localId || 'skipped',
+            status: 'success',
+          });
           continue;
       }
 
       try {
+        let receipt = null;
         if (operationId) {
-          const receipt = await SyncReceipt.findOne({ operationId });
-          if (receipt) {
-            results.push({
-              operationId,
-              entityType,
-              operationType,
-              localId,
-              serverId: receipt.serverId,
-              status: 'success',
-            });
-            continue;
-          }
+          receipt = await SyncReceipt.findOne({ operationId });
+        }
+        if (!receipt && localId && entityType && operationType === 'create') {
+          receipt = await SyncReceipt.findOne({ entityType, localId: localId.toString() });
+        }
+        if (receipt) {
+          results.push({
+            operationId,
+            entityType,
+            operationType,
+            localId,
+            serverId: receipt.serverId,
+            status: 'success',
+          });
+          continue;
         }
 
         let resultServerId = serverId || null;
 
-        // Foreign key resolution for offline resilience
-        if (entityType === 'menuItem' && payload) {
-          if (payload.category) {
-            if (mongoose.Types.ObjectId.isValid(payload.category)) {
-              payload.category = new mongoose.Types.ObjectId(payload.category);
-            } else {
-              const receipt = await SyncReceipt.findOne({
-                entityType: 'category',
-                localId: payload.category.toString(),
-              });
-              if (receipt && receipt.serverId && mongoose.Types.ObjectId.isValid(receipt.serverId)) {
-                payload.category = new mongoose.Types.ObjectId(receipt.serverId);
-              } else {
-                const firstCat = await Category.findOne();
-                if (firstCat) {
-                  payload.category = firstCat._id;
-                }
-              }
-            }
-          }
-        } else if (entityType === 'order' && payload) {
+        // Foreign key resolution for offline customer matching
+        if (entityType === 'order' && payload) {
           const rawCust = payload.customer || payload.customerId;
           if (rawCust) {
             if (mongoose.Types.ObjectId.isValid(rawCust)) {
               payload.customer = new mongoose.Types.ObjectId(rawCust);
             } else {
-              const receipt = await SyncReceipt.findOne({
+              const custReceipt = await SyncReceipt.findOne({
                 entityType: 'customer',
                 localId: rawCust.toString(),
               });
-              payload.customer = (receipt && mongoose.Types.ObjectId.isValid(receipt.serverId))
-                ? new mongoose.Types.ObjectId(receipt.serverId)
+              payload.customer = (custReceipt && mongoose.Types.ObjectId.isValid(custReceipt.serverId))
+                ? new mongoose.Types.ObjectId(custReceipt.serverId)
                 : null;
             }
           } else {
             payload.customer = null;
           }
           delete payload.customerId;
-
-          if (Array.isArray(payload.items)) {
-            for (const item of payload.items) {
-              if (item.menuItem) {
-                if (mongoose.Types.ObjectId.isValid(item.menuItem)) {
-                  item.menuItem = new mongoose.Types.ObjectId(item.menuItem);
-                } else {
-                  const receipt = await SyncReceipt.findOne({
-                    entityType: 'menuItem',
-                    localId: item.menuItem.toString(),
-                  });
-                  if (receipt && mongoose.Types.ObjectId.isValid(receipt.serverId)) {
-                    item.menuItem = new mongoose.Types.ObjectId(receipt.serverId);
-                  } else {
-                    const foundItem = await MenuItem.findOne({ name: item.name });
-                    item.menuItem = foundItem ? foundItem._id : null;
-                  }
-                }
-              }
-            }
-          }
         }
 
         if (operationType === 'create') {
-          // Idempotent matching prevents duplicate creates when a response is lost
-          // and the mobile outbox retries the same logical operation.
+          // Normalize empty loyaltyCardNumber to null for sparse unique index compatibility
+          if (entityType === 'customer' && payload.loyaltyCardNumber === '') {
+            payload.loyaltyCardNumber = null;
+          }
+
+          // Idempotent matching prevents duplicate records
           let doc;
           if (entityType === 'order' && payload.orderNumber) {
             doc = await model.findOne({ orderNumber: payload.orderNumber });
           } else if (entityType === 'customer' && payload.phone) {
             doc = await model.findOne({ phone: payload.phone });
-          } else if (entityType === 'category' && payload.name) {
-            doc = await model.findOne({ name: payload.name });
-          } else if (entityType === 'expenseCategory' && payload.name) {
-            doc = await model.findOne({ name: payload.name });
-          } else if (entityType === 'menuItem' && payload.name && payload.category) {
-            doc = await model.findOne({ name: payload.name, category: payload.category });
           } else if (entityType === 'settings') {
             doc = await model.findOne();
           }
@@ -198,6 +151,10 @@ class SyncService {
           });
           resultServerId = doc._id.toString();
         } else if (operationType === 'update' && (serverId || entityType === 'settings')) {
+          // Normalize empty loyaltyCardNumber to null for customer updates
+          if (entityType === 'customer' && payload.loyaltyCardNumber === '') {
+            payload.loyaltyCardNumber = null;
+          }
           if (entityType === 'settings' && !serverId) {
             let settings = await model.findOne();
             if (settings) {
@@ -266,24 +223,12 @@ class SyncService {
   }
 
   /**
-   * Export all cloud data stored in MongoDB across all collections.
+   * Export all cloud data stored in MongoDB (Orders & Customers).
    */
   async exportAllData() {
     const exportedAt = new Date();
-    const [
-      categories,
-      menuItems,
-      customers,
-      expenseCategories,
-      expenses,
-      orders,
-      settings,
-    ] = await Promise.all([
-      Category.find().lean(),
-      MenuItem.find().populate('category', '_id name').lean(),
+    const [customers, orders, settings] = await Promise.all([
       Customer.find().lean(),
-      ExpenseCategory.find().lean(),
-      Expense.find().lean(),
       Order.find().lean(),
       BusinessSettings.findOne().lean(),
     ]);
@@ -293,87 +238,50 @@ class SyncService {
       exportedAt: exportedAt.toISOString(),
       database: 'FoodBillX MongoDB Cloud Backup',
       summary: {
-        totalCategories: categories.length,
-        totalMenuItems: menuItems.length,
         totalCustomers: customers.length,
         totalOrders: orders.length,
-        totalExpenses: expenses.length,
-        totalExpenseCategories: expenseCategories.length,
-        totalRecords:
-          categories.length +
-          menuItems.length +
-          customers.length +
-          orders.length +
-          expenses.length +
-          expenseCategories.length,
+        totalRecords: customers.length + orders.length,
       },
       data: {
         businessSettings: settings,
-        categories,
-        menuItems,
         customers,
         orders,
-        expenses,
-        expenseCategories,
       },
     };
   }
 
   /**
-   * Get sync and cloud backup status including record counts and latest activity.
+   * Get sync and cloud backup status including record counts.
    */
   async getSyncStatus() {
     const [
-      categoriesCount,
-      menuItemsCount,
       customersCount,
       ordersCount,
-      expensesCount,
-      expenseCategoriesCount,
       latestOrder,
-      latestExpense,
       latestReceipt,
     ] = await Promise.all([
-      Category.countDocuments(),
-      MenuItem.countDocuments(),
       Customer.countDocuments(),
       Order.countDocuments(),
-      Expense.countDocuments(),
-      ExpenseCategory.countDocuments(),
       Order.findOne().sort({ updatedAt: -1 }).select('updatedAt').lean(),
-      Expense.findOne().sort({ updatedAt: -1 }).select('updatedAt').lean(),
       SyncReceipt.findOne().sort({ createdAt: -1 }).select('createdAt').lean(),
     ]);
 
     const dates = [
       latestReceipt?.createdAt,
       latestOrder?.updatedAt,
-      latestExpense?.updatedAt,
     ].filter(Boolean);
 
     const latestSyncTime = dates.length > 0
       ? new Date(Math.max(...dates.map((d) => new Date(d).getTime()))).toISOString()
       : null;
 
-    const totalRecords =
-      categoriesCount +
-      menuItemsCount +
-      customersCount +
-      ordersCount +
-      expensesCount +
-      expenseCategoriesCount;
-
     return {
       databaseStatus: 'Connected',
       lastSyncedAt: latestSyncTime,
-      totalRecords,
+      totalRecords: customersCount + ordersCount,
       counts: {
         orders: ordersCount,
-        expenses: expensesCount,
         customers: customersCount,
-        menuItems: menuItemsCount,
-        categories: categoriesCount,
-        expenseCategories: expenseCategoriesCount,
       },
     };
   }
