@@ -25,6 +25,7 @@ class OrderRepository {
 
   Future<OrderModel> create({
     String? orderNumber,
+    String? prefix,
     String? customerServerId,
     required String customerName,
     required String customerPhone,
@@ -40,6 +41,7 @@ class OrderRepository {
   }) async {
     return await _localDb.insertOrder(
       orderNumber: orderNumber,
+      prefix: prefix,
       customerId: customerServerId,
       customerName: customerName,
       customerPhone: customerPhone,

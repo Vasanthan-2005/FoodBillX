@@ -77,4 +77,8 @@ class ApiEndpoints {
   // Cloud Backup & Sync (Only network data flow for mobile)
   static const String syncPush = '/sync/push';
   static const String syncPull = '/sync/pull';
+
+  // App Update
+  static const String appVersionCheck = '/app/version';
+  static const String appDownload = '/app/download';
 }

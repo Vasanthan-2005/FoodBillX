@@ -28,8 +28,13 @@ class DashboardState {
   final double averageBillValue;
   final String peakSellingHour;
 
+  final String todayTopDishName;
+  final int todayTopDishCount;
+  final Map<String, double> todayPaymentBreakdown;
+
   final List<double> hourlyRevenueToday;
   final List<double> recentDailyRevenue;
+  final List<double> currentWeekDailyRevenue;
   final List<double> monthlyWeeklyRevenue;
   final List<Map<String, dynamic>> topSellingItems;
   final List<Map<String, dynamic>> leastSellingItems;
@@ -61,9 +66,13 @@ class DashboardState {
     this.overallExpenseTotal = 0,
     this.overallProfit = 0,
     this.averageBillValue = 0,
-    this.peakSellingHour = '1:00 PM',
+    this.peakSellingHour = 'No orders yet',
+    this.todayTopDishName = '',
+    this.todayTopDishCount = 0,
+    this.todayPaymentBreakdown = const {},
     this.hourlyRevenueToday = const [],
     this.recentDailyRevenue = const [],
+    this.currentWeekDailyRevenue = const [],
     this.monthlyWeeklyRevenue = const [],
     this.topSellingItems = const [],
     this.leastSellingItems = const [],
@@ -96,8 +105,12 @@ class DashboardState {
     double? overallProfit,
     double? averageBillValue,
     String? peakSellingHour,
+    String? todayTopDishName,
+    int? todayTopDishCount,
+    Map<String, double>? todayPaymentBreakdown,
     List<double>? hourlyRevenueToday,
     List<double>? recentDailyRevenue,
+    List<double>? currentWeekDailyRevenue,
     List<double>? monthlyWeeklyRevenue,
     List<Map<String, dynamic>>? topSellingItems,
     List<Map<String, dynamic>>? leastSellingItems,
@@ -129,8 +142,12 @@ class DashboardState {
       overallProfit: overallProfit ?? this.overallProfit,
       averageBillValue: averageBillValue ?? this.averageBillValue,
       peakSellingHour: peakSellingHour ?? this.peakSellingHour,
+      todayTopDishName: todayTopDishName ?? this.todayTopDishName,
+      todayTopDishCount: todayTopDishCount ?? this.todayTopDishCount,
+      todayPaymentBreakdown: todayPaymentBreakdown ?? this.todayPaymentBreakdown,
       hourlyRevenueToday: hourlyRevenueToday ?? this.hourlyRevenueToday,
       recentDailyRevenue: recentDailyRevenue ?? this.recentDailyRevenue,
+      currentWeekDailyRevenue: currentWeekDailyRevenue ?? this.currentWeekDailyRevenue,
       monthlyWeeklyRevenue: monthlyWeeklyRevenue ?? this.monthlyWeeklyRevenue,
       topSellingItems: topSellingItems ?? this.topSellingItems,
       leastSellingItems: leastSellingItems ?? this.leastSellingItems,
@@ -177,7 +194,15 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     final overallProfit = (summary['overallProfit'] as num?)?.toDouble() ?? (overallRevenue - overallExpenseTotal);
 
     final averageBillValue = (summary['averageBillValue'] as num?)?.toDouble() ?? 0.0;
-    final peakSellingHour = (summary['peakSellingHour'] as String?) ?? '1:00 PM';
+    final peakSellingHour = (summary['peakSellingHour'] as String?) ?? 'No orders yet';
+    final todayTopDishName = (summary['todayTopDishName'] as String?) ?? '';
+    final todayTopDishCount = (summary['todayTopDishCount'] as num?)?.toInt() ?? 0;
+
+    final rawTodayPay = summary['todayPaymentBreakdown'] as Map? ?? {};
+    final todayPaymentBreakdown = <String, double>{};
+    for (final e in rawTodayPay.entries) {
+      todayPaymentBreakdown[e.key.toString()] = (e.value as num?)?.toDouble() ?? 0.0;
+    }
 
     final rawTop = summary['topSellingItems'] as List? ?? [];
     final topSellingItems = rawTop.map((e) => Map<String, dynamic>.from(e)).toList();
@@ -201,6 +226,9 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
     final rawDailyRev = summary['recentDailyRevenue'] as List? ?? [];
     final recentDailyRevenue = rawDailyRev.map((e) => (e as num).toDouble()).toList();
+
+    final rawCurrentWeekDailyRev = summary['currentWeekDailyRevenue'] as List? ?? [];
+    final currentWeekDailyRevenue = rawCurrentWeekDailyRev.map((e) => (e as num).toDouble()).toList();
 
     final rawMonthlyRev = summary['monthlyWeeklyRevenue'] as List? ?? [];
     final monthlyWeeklyRevenue = rawMonthlyRev.map((e) => (e as num).toDouble()).toList();
@@ -227,8 +255,12 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       overallProfit: overallProfit,
       averageBillValue: averageBillValue,
       peakSellingHour: peakSellingHour,
+      todayTopDishName: todayTopDishName,
+      todayTopDishCount: todayTopDishCount,
+      todayPaymentBreakdown: todayPaymentBreakdown,
       hourlyRevenueToday: hourlyRevenueToday.isNotEmpty ? hourlyRevenueToday : List.filled(6, 0.0),
       recentDailyRevenue: recentDailyRevenue.isNotEmpty ? recentDailyRevenue : List.filled(7, 0.0),
+      currentWeekDailyRevenue: currentWeekDailyRevenue.isNotEmpty ? currentWeekDailyRevenue : List.filled(7, 0.0),
       monthlyWeeklyRevenue: monthlyWeeklyRevenue.isNotEmpty ? monthlyWeeklyRevenue : List.filled(5, 0.0),
       topSellingItems: topSellingItems,
       leastSellingItems: leastSellingItems,

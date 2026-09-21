@@ -65,4 +65,28 @@ class AppColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
+
+  // ──────────────────────────────────────────────
+  // Saffron Dark Theme Palette
+  // ──────────────────────────────────────────────
+  static const Color saffronPrimary = Color(0xFFFF8F00);      // Warm Saffron
+  static const Color saffronSecondary = Color(0xFFFFAB40);     // Amber Gold
+  static const Color saffronBackground = Color(0xFF1A1410);    // Deep warm brown-black
+  static const Color saffronSurface = Color(0xFF2A2018);       // Warm dark surface
+  static const Color saffronCard = Color(0xFF332A1E);          // Warm card
+  static const Color saffronBorder = Color(0xFF4A3D2E);        // Warm border
+  static const Color saffronTextPrimary = Color(0xFFFFF3E0);   // Warm off-white
+  static const Color saffronTextSecondary = Color(0xFFBCA88A); // Muted warm grey
+
+  // ──────────────────────────────────────────────
+  // Emerald Dark Theme Palette
+  // ──────────────────────────────────────────────
+  static const Color emeraldPrimary = Color(0xFF00E676);       // Bright Emerald
+  static const Color emeraldSecondary = Color(0xFF69F0AE);     // Light Green Accent
+  static const Color emeraldBackground = Color(0xFF0D1A14);    // Deep green-black
+  static const Color emeraldSurface = Color(0xFF162A20);       // Dark green surface
+  static const Color emeraldCard = Color(0xFF1E3328);          // Green card
+  static const Color emeraldBorder = Color(0xFF2E4A3B);        // Green border
+  static const Color emeraldTextPrimary = Color(0xFFE8F5E9);   // Minty off-white
+  static const Color emeraldTextSecondary = Color(0xFF81C784); // Muted green grey
 }

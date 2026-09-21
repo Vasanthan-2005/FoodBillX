@@ -44,13 +44,14 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   }
 
   void _showCheckoutBottomSheet() {
+    final parentContext = context;
     showModalBottomSheet(
-      context: context,
+      context: parentContext,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) {
+      builder: (sheetCtx) {
         return Consumer(
-          builder: (context, ref, child) {
+          builder: (consumerCtx, ref, child) {
             final cartState = ref.watch(billingProvider);
             final notifier = ref.read(billingProvider.notifier);
             final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -343,14 +344,19 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      onPressed: cartState.isSubmitting
+                      onPressed: (cartState.isSubmitting || cartState.cartItems.isEmpty)
                           ? null
                           : () async {
                               final result = await notifier.checkoutAndGenerateInvoice();
-                              if (context.mounted) {
-                                Navigator.pop(context);
+                              if (sheetCtx.mounted) {
+                                Navigator.pop(sheetCtx);
+                              }
+                              if (parentContext.mounted) {
                                 if (result != null) {
-                                  _showPostPaymentInvoiceDialog(context, result);
+                                  _showPostPaymentInvoiceDialog(parentContext, result);
+                                } else {
+                                  final err = ref.read(billingProvider).errorMessage ?? 'Could not complete order.';
+                                  SnackbarUtils.showError(parentContext, err);
                                 }
                               }
                             },

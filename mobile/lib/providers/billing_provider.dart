@@ -314,7 +314,10 @@ class BillingNotifier extends StateNotifier<BillingState> {
   }
 
   Future<CheckoutResult?> checkoutAndGenerateInvoice() async {
-    if (state.cartItems.isEmpty) return null;
+    if (state.cartItems.isEmpty) {
+      state = state.copyWith(errorMessage: 'Cart is empty. Please add items before checkout.');
+      return null;
+    }
     state = state.copyWith(isSubmitting: true, errorMessage: null);
 
     try {
@@ -335,6 +338,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
       }).toList();
 
       final createdOrder = await _orderRepo.create(
+        prefix: prefix,
         customerServerId: checkout.customerId,
         customerName: checkout.customerName,
         customerPhone: checkout.customerPhone,

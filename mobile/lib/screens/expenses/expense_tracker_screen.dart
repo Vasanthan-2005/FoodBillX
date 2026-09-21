@@ -245,14 +245,16 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'expense_fab',
-        onPressed: () => _showAddEditExpenseDialog(),
-        backgroundColor: Colors.red.shade700,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text('Add Expense', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        elevation: 6,
-      ),
+      floatingActionButton: expenseState.expenses.isNotEmpty
+          ? FloatingActionButton.extended(
+              heroTag: 'expense_fab',
+              onPressed: () => _showAddEditExpenseDialog(),
+              backgroundColor: Colors.red.shade700,
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              label: const Text('Add Expense', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              elevation: 6,
+            )
+          : null,
       body: expenseState.isLoading
           ? const Padding(
               padding: EdgeInsets.all(16.0),

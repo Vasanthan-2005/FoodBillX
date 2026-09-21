@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../utils/currency_formatter.dart';
 
-import '../widgets/profit_display_widget.dart';
-
 class RevenueLineChartWidget extends StatelessWidget {
   final String title;
   final double totalRevenue;
@@ -66,19 +64,24 @@ class RevenueLineChartWidget extends StatelessWidget {
           children: [
             // Header Row (Title on Left, Revenue/Profit on Right if provided)
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.lightTextSecondary,
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.lightTextSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (totalProfit != null)
+                if (totalProfit != null && (expenseAmount ?? 0) > 0) ...[
+                  const SizedBox(width: 8),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -86,24 +89,28 @@ class RevenueLineChartWidget extends StatelessWidget {
                         'Total Profit',
                         style: TextStyle(fontSize: 10, color: Colors.grey),
                       ),
-                      ProfitDisplayWidget(
-                        expenseAmount: expenseAmount ?? 0,
-                        profitAmount: totalProfit!,
-                        showPercentBadge: false,
-                        textStyle: const TextStyle(
+                      Text(
+                        CurrencyFormatter.format(totalProfit!),
+                        style: TextStyle(
                           fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                          color: AppColors.secondary,
+                          fontSize: 12,
+                          color: totalProfit! >= 0
+                              ? AppColors.secondary
+                              : Colors.red,
                         ),
                       ),
                     ],
                   ),
+                ],
               ],
             ),
             const SizedBox(height: 6),
 
-            // Revenue Amount + % Change Pill Badge
-            Row(
+            // Revenue Amount + % Change Pill Badge (using Wrap to prevent overflow)
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
+              runSpacing: 4,
               children: [
                 Text(
                   CurrencyFormatter.format(totalRevenue),
@@ -156,15 +163,45 @@ class RevenueLineChartWidget extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // Line Chart
+            // Line Chart or Clean Empty State
             SizedBox(
               height: 180,
-              child: LineChart(
-                LineChartData(
-                  minX: 0,
-                  maxX: (values.length - 1).toDouble().clamp(0, 100),
-                  minY: 0,
-                  maxY: maxY <= 0 ? 100 : maxY,
+              child: (totalRevenue <= 0 && values.every((v) => v <= 0))
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.show_chart_rounded,
+                            size: 40,
+                            color: isDark ? Colors.white24 : Colors.black26,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No sales data for this period',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white54 : Colors.black45,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Sales trends will appear here once orders are billed',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? Colors.white38 : Colors.black38,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : LineChart(
+                      LineChartData(
+                        minX: 0,
+                        maxX: (values.length - 1).toDouble().clamp(0, 100),
+                        minY: 0,
+                        maxY: maxY <= 0 ? 100 : maxY,
                   lineTouchData: LineTouchData(
                     enabled: true,
                     touchTooltipData: LineTouchTooltipData(

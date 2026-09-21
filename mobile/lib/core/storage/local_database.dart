@@ -382,11 +382,12 @@ class LocalDatabase {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
     final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59, 999).toIso8601String();
+    final todayDateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
     final db = await database;
     final res = await db.rawQuery(
-      'SELECT SUM(amount) as total FROM expenses WHERE date >= ? AND date <= ? AND deleted_at IS NULL',
-      [startOfDay, endOfDay],
+      'SELECT SUM(amount) as total FROM expenses WHERE (date LIKE ? OR (date >= ? AND date <= ?)) AND deleted_at IS NULL',
+      ['$todayDateStr%', startOfDay, endOfDay],
     );
     final total = res.first['total'] as num?;
     return total?.toDouble() ?? 0.0;
@@ -998,22 +999,52 @@ class LocalDatabase {
 
   Future<String> generateNextOrderNumber(String prefix) async {
     final now = DateTime.now();
-    final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
-    final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59, 999).toIso8601String();
+    final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    final cleanPrefix = prefix.trim().isNotEmpty ? prefix.trim() : 'B';
+    final pattern = '$cleanPrefix-$dateStr-%';
 
     final db = await database;
-    final res = await db.rawQuery(
-      'SELECT COUNT(*) as cnt FROM orders WHERE created_at >= ? AND created_at <= ?',
-      [startOfDay, endOfDay],
+    final rows = await db.rawQuery(
+      'SELECT order_number FROM orders WHERE order_number LIKE ?',
+      [pattern],
     );
-    final count = (res.first['cnt'] as num?)?.toInt() ?? 0;
-    final seq = (count + 1).toString().padLeft(3, '0');
-    final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-    return '$prefix-$dateStr-$seq';
+
+    int maxSeq = 0;
+    for (final row in rows) {
+      final numStr = row['order_number'] as String?;
+      if (numStr != null) {
+        final parts = numStr.split('-');
+        if (parts.isNotEmpty) {
+          final lastPart = int.tryParse(parts.last);
+          if (lastPart != null && lastPart > maxSeq) {
+            maxSeq = lastPart;
+          }
+        }
+      }
+    }
+
+    int nextSeq = maxSeq + 1;
+    String candidate = '$cleanPrefix-$dateStr-${nextSeq.toString().padLeft(3, '0')}';
+
+    while (true) {
+      final existing = await db.query(
+        'orders',
+        columns: ['id'],
+        where: 'order_number = ?',
+        whereArgs: [candidate],
+        limit: 1,
+      );
+      if (existing.isEmpty) break;
+      nextSeq++;
+      candidate = '$cleanPrefix-$dateStr-${nextSeq.toString().padLeft(3, '0')}';
+    }
+
+    return candidate;
   }
 
   Future<OrderModel> insertOrder({
     String? orderNumber,
+    String? prefix,
     String? customerId,
     required String customerName,
     required String customerPhone,
@@ -1033,7 +1064,7 @@ class LocalDatabase {
 
     final finalOrderNumber = orderNumber != null && orderNumber.isNotEmpty
         ? orderNumber
-        : await generateNextOrderNumber('B');
+        : await generateNextOrderNumber(prefix ?? 'B');
 
     final itemsJson = jsonEncode(items.map((i) => i.toJson()).toList());
 
@@ -1199,9 +1230,11 @@ class LocalDatabase {
     final overallOrderCount = (overallRes.first['cnt'] as num?)?.toInt() ?? 0;
 
     // 6. Expenses: Today, Week, Month, Overall
+    final todayDateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final expToday = await db.rawQuery('''
-      SELECT SUM(amount) as exp FROM expenses WHERE date >= ? AND date <= ? AND deleted_at IS NULL
-    ''', [todayStart, todayEnd]);
+      SELECT SUM(amount) as exp FROM expenses 
+      WHERE (date LIKE ? OR (date >= ? AND date <= ?)) AND deleted_at IS NULL
+    ''', ['$todayDateStr%', todayStart, todayEnd]);
     final todayExpenseTotal = (expToday.first['exp'] as num?)?.toDouble() ?? 0.0;
 
     final expWeek = await db.rawQuery('''
@@ -1231,6 +1264,26 @@ class LocalDatabase {
         WHERE created_at >= ? AND created_at <= ? AND order_status != 'refunded' AND deleted_at IS NULL
       ''', [dStart, dEnd]);
       recentDailyRevenue.add((dayRes.first['rev'] as num?)?.toDouble() ?? 0.0);
+    }
+
+    // Current calendar week daily revenue: Monday to Sunday (7 slots)
+    // Ensures Monday's sale always appears under Monday (index 0)
+    final monday = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+    final currentWeekDailyRevenue = <double>[];
+    for (int i = 0; i < 7; i++) {
+      final day = monday.add(Duration(days: i));
+      if (day.isAfter(now)) {
+        currentWeekDailyRevenue.add(0.0);
+      } else {
+        final dStart = DateTime(day.year, day.month, day.day).toIso8601String();
+        final dEnd = DateTime(day.year, day.month, day.day, 23, 59, 59, 999).toIso8601String();
+        final dayRes = await db.rawQuery('''
+          SELECT SUM(grand_total) as rev
+          FROM orders
+          WHERE created_at >= ? AND created_at <= ? AND order_status != 'refunded' AND deleted_at IS NULL
+        ''', [dStart, dEnd]);
+        currentWeekDailyRevenue.add((dayRes.first['rev'] as num?)?.toDouble() ?? 0.0);
+      }
     }
 
     // 8. Payment Breakdown
@@ -1284,6 +1337,125 @@ class LocalDatabase {
     final topItems = itemSalesMap.values.toList()
       ..sort((a, b) => (b['totalQuantity'] as int).compareTo(a['totalQuantity'] as int));
 
+    // Previous week boundaries for real comparison
+    final prevWeekStart = DateTime.parse(weekStart).subtract(const Duration(days: 7)).toIso8601String();
+    final prevWeekEnd = weekStart;
+    final prevWeekRes = await db.rawQuery('''
+      SELECT SUM(grand_total) as rev
+      FROM orders
+      WHERE created_at >= ? AND created_at < ? AND order_status != 'refunded' AND deleted_at IS NULL
+    ''', [prevWeekStart, prevWeekEnd]);
+    final previousWeekRevenue = (prevWeekRes.first['rev'] as num?)?.toDouble() ?? 0.0;
+
+    // Previous month boundaries for real comparison
+    final prevMonthYear = now.month == 1 ? now.year - 1 : now.year;
+    final prevMonthMonth = now.month == 1 ? 12 : now.month - 1;
+    final prevMonthStart = DateTime(prevMonthYear, prevMonthMonth, 1).toIso8601String();
+    final prevMonthEnd = monthStart;
+    final prevMonthRes = await db.rawQuery('''
+      SELECT SUM(grand_total) as rev
+      FROM orders
+      WHERE created_at >= ? AND created_at < ? AND order_status != 'refunded' AND deleted_at IS NULL
+    ''', [prevMonthStart, prevMonthEnd]);
+    final previousMonthRevenue = (prevMonthRes.first['rev'] as num?)?.toDouble() ?? 0.0;
+
+    // Real hourly buckets for Today (6 blocks of 4 hours: 12-4 AM, 4-8 AM, 8-12 PM, 12-4 PM, 4-8 PM, 8-12 AM)
+    final hourlyRevenueToday = List<double>.filled(6, 0.0);
+    final todayOrders = await db.query(
+      'orders',
+      columns: ['created_at', 'grand_total', 'payment_method', 'items_json'],
+      where: "created_at >= ? AND created_at <= ? AND order_status != 'refunded' AND deleted_at IS NULL",
+      whereArgs: [todayStart, todayEnd],
+    );
+
+    final todayItemSales = <String, int>{};
+    final todayPaymentCounts = <String, double>{'cash': 0.0, 'upi': 0.0, 'card': 0.0};
+
+    for (final o in todayOrders) {
+      final total = (o['grand_total'] as num?)?.toDouble() ?? 0.0;
+      final createdAtStr = o['created_at'] as String?;
+      if (createdAtStr != null) {
+        try {
+          final dt = DateTime.parse(createdAtStr);
+          final hour = dt.hour;
+          final bucket = (hour / 4).floor().clamp(0, 5);
+          hourlyRevenueToday[bucket] += total;
+        } catch (_) {}
+      }
+
+      final pay = (o['payment_method'] as String? ?? 'cash').toLowerCase();
+      todayPaymentCounts[pay] = (todayPaymentCounts[pay] ?? 0.0) + total;
+
+      final itemsRaw = o['items_json'] as String?;
+      if (itemsRaw != null) {
+        try {
+          final list = jsonDecode(itemsRaw) as List;
+          for (final it in list) {
+            final name = it['name']?.toString() ?? 'Dish';
+            final qty = (it['quantity'] as num?)?.toInt() ?? 1;
+            todayItemSales[name] = (todayItemSales[name] ?? 0) + qty;
+          }
+        } catch (_) {}
+      }
+    }
+
+    String todayTopDishName = '';
+    int todayTopDishCount = 0;
+    if (todayItemSales.isNotEmpty) {
+      final sortedTodayItems = todayItemSales.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      todayTopDishName = sortedTodayItems.first.key;
+      todayTopDishCount = sortedTodayItems.first.value;
+    }
+
+    // Weekly intervals for the current month (5 slots)
+    final monthlyWeeklyRevenue = List<double>.filled(5, 0.0);
+    for (int w = 0; w < 5; w++) {
+      final wStart = DateTime(now.year, now.month, 1 + (w * 7)).toIso8601String();
+      final endDay = (1 + ((w + 1) * 7) - 1);
+      final lastDayOfMonth = DateTime(now.year, now.month + 1, 0).day;
+      final actualEndDay = endDay > lastDayOfMonth ? lastDayOfMonth : endDay;
+      if (1 + (w * 7) <= lastDayOfMonth) {
+        final wEnd = DateTime(now.year, now.month, actualEndDay, 23, 59, 59, 999).toIso8601String();
+        final wRes = await db.rawQuery('''
+          SELECT SUM(grand_total) as rev
+          FROM orders
+          WHERE created_at >= ? AND created_at <= ? AND order_status != 'refunded' AND deleted_at IS NULL
+        ''', [wStart, wEnd]);
+        monthlyWeeklyRevenue[w] = (wRes.first['rev'] as num?)?.toDouble() ?? 0.0;
+      }
+    }
+
+    // Real Peak Selling Hour
+    String peakSellingHour = 'No orders yet';
+    if (overallOrderCount > 0) {
+      final allOrdersHours = await db.rawQuery('''
+        SELECT created_at FROM orders
+        WHERE order_status != 'refunded' AND deleted_at IS NULL
+      ''');
+      final hourHistogram = <int, int>{};
+      for (final row in allOrdersHours) {
+        final rawDate = row['created_at'] as String?;
+        if (rawDate != null) {
+          try {
+            final dt = DateTime.parse(rawDate);
+            hourHistogram[dt.hour] = (hourHistogram[dt.hour] ?? 0) + 1;
+          } catch (_) {}
+        }
+      }
+      if (hourHistogram.isNotEmpty) {
+        final sortedHours = hourHistogram.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        final peakH = sortedHours.first.key;
+        final period = peakH >= 12 ? 'PM' : 'AM';
+        final displayH = peakH == 0 ? 12 : (peakH > 12 ? peakH - 12 : peakH);
+        final nextH = (peakH + 1) % 24;
+        final nextPeriod = nextH >= 12 ? 'PM' : 'AM';
+        final nextDisplayH = nextH == 0 ? 12 : (nextH > 12 ? nextH - 12 : nextH);
+        peakSellingHour = '$displayH:00 $period - $nextDisplayH:00 $nextPeriod';
+      }
+    }
+
     return {
       'todayRevenue': todayRevenue,
       'todayOrderCount': todayOrderCount,
@@ -1294,21 +1466,27 @@ class LocalDatabase {
       'weekOrderCount': weekOrderCount,
       'weekExpenseTotal': weekExpenseTotal,
       'weeklyProfit': weekRevenue - weekExpenseTotal,
-      'previousWeekRevenue': 0.0,
+      'previousWeekRevenue': previousWeekRevenue,
       'monthRevenue': monthRevenue,
       'monthOrderCount': monthOrderCount,
       'monthExpenseTotal': monthExpenseTotal,
       'monthlyProfit': monthRevenue - monthExpenseTotal,
-      'previousMonthRevenue': 0.0,
+      'previousMonthRevenue': previousMonthRevenue,
       'overallRevenue': overallRevenue,
       'overallOrderCount': overallOrderCount,
       'overallExpenseTotal': overallExpenseTotal,
       'overallProfit': overallRevenue - overallExpenseTotal,
       'averageBillValue': overallOrderCount > 0 ? (overallRevenue / overallOrderCount) : 0.0,
-      'peakSellingHour': '1:00 PM',
+      'peakSellingHour': peakSellingHour,
       'recentDailyRevenue': recentDailyRevenue,
+      'currentWeekDailyRevenue': currentWeekDailyRevenue,
+      'hourlyRevenueToday': hourlyRevenueToday,
+      'monthlyWeeklyRevenue': monthlyWeeklyRevenue,
       'topSellingItems': topItems.take(5).toList(),
       'leastSellingItems': topItems.reversed.take(5).toList(),
+      'todayTopDishName': todayTopDishName,
+      'todayTopDishCount': todayTopDishCount,
+      'todayPaymentBreakdown': todayPaymentCounts,
       'customerAnalytics': {
         'totalCustomers': custTotal.toInt(),
         'loyaltyMembers': custLoyal.toInt(),
@@ -1327,10 +1505,6 @@ class LocalDatabase {
     final db = await database;
     int count = 0;
     const tables = [
-      'expenses',
-      'expense_categories',
-      'categories',
-      'menu_items',
       'customers',
       'orders',
       'business_settings',
@@ -1373,88 +1547,7 @@ class LocalDatabase {
       ));
     }
 
-    // 2. Categories
-    final catRows = await db.query('categories', where: "sync_status != 'synced'");
-    for (final r in catRows) {
-      final status = r['sync_status'] as String;
-      final opType = status == 'pendingDelete' ? 'delete' : (status == 'pendingCreate' ? 'create' : 'update');
-      ops.add(SyncQueueItem(
-        operationId: _uuid.v4(),
-        entityType: 'category',
-        operationType: opType,
-        localId: r['id'] as String,
-        serverId: r['server_id'] as String?,
-        payload: {
-          'name': r['name'],
-          'icon': r['icon'],
-          'sortOrder': r['sort_order'],
-          'isActive': (r['is_active'] as int? ?? 1) == 1,
-        },
-      ));
-    }
-
-    // 3. Expense Categories
-    final expCatRows = await db.query('expense_categories', where: "sync_status != 'synced'");
-    for (final r in expCatRows) {
-      final status = r['sync_status'] as String;
-      final opType = status == 'pendingDelete' ? 'delete' : (status == 'pendingCreate' ? 'create' : 'update');
-      ops.add(SyncQueueItem(
-        operationId: _uuid.v4(),
-        entityType: 'expenseCategory',
-        operationType: opType,
-        localId: r['id'] as String,
-        serverId: r['server_id'] as String?,
-        payload: {
-          'name': r['name'],
-          'icon': r['icon'],
-          'isActive': (r['is_active'] as int? ?? 1) == 1,
-        },
-      ));
-    }
-
-    // 4. Menu Items
-    final itemRows = await db.query('menu_items', where: "sync_status != 'synced'");
-    for (final r in itemRows) {
-      final status = r['sync_status'] as String;
-      final opType = status == 'pendingDelete' ? 'delete' : (status == 'pendingCreate' ? 'create' : 'update');
-
-      // Resolve category server_id if available
-      String categoryRef = r['category_id'] as String;
-      final catRows = await db.query(
-        'categories',
-        columns: ['server_id'],
-        where: 'id = ?',
-        whereArgs: [categoryRef],
-        limit: 1,
-      );
-      if (catRows.isNotEmpty &&
-          catRows.first['server_id'] != null &&
-          (catRows.first['server_id'] as String).isNotEmpty) {
-        categoryRef = catRows.first['server_id'] as String;
-      }
-
-      ops.add(SyncQueueItem(
-        operationId: _uuid.v4(),
-        entityType: 'menuItem',
-        operationType: opType,
-        localId: r['id'] as String,
-        serverId: r['server_id'] as String?,
-        payload: {
-          'category': categoryRef,
-          'name': r['name'],
-          'description': r['description'],
-          'price': r['price'],
-          'discount': r['discount'],
-          'gstPercentage': r['gst_percentage'],
-          'image': r['image'],
-          'isVeg': (r['is_veg'] as int? ?? 1) == 1,
-          'isAvailable': (r['is_available'] as int? ?? 1) == 1,
-          'sortOrder': r['sort_order'],
-        },
-      ));
-    }
-
-    // 5. Customers
+    // 2. Customers
     final custRows = await db.query('customers', where: "sync_status != 'synced'");
     for (final r in custRows) {
       final status = r['sync_status'] as String;
@@ -1479,28 +1572,7 @@ class LocalDatabase {
       ));
     }
 
-    // 6. Expenses
-    final expRows = await db.query('expenses', where: "sync_status != 'synced'");
-    for (final r in expRows) {
-      final status = r['sync_status'] as String;
-      final opType = status == 'pendingDelete' ? 'delete' : (status == 'pendingCreate' ? 'create' : 'update');
-      ops.add(SyncQueueItem(
-        operationId: _uuid.v4(),
-        entityType: 'expense',
-        operationType: opType,
-        localId: r['id'] as String,
-        serverId: r['server_id'] as String?,
-        payload: {
-          'title': r['title'],
-          'category': r['category'],
-          'amount': r['amount'],
-          'date': r['date'],
-          'notes': r['notes'],
-        },
-      ));
-    }
-
-    // 7. Orders
+    // 3. Orders
     final orderRows = await db.query('orders', where: "sync_status != 'synced'");
     for (final r in orderRows) {
       final status = r['sync_status'] as String;
@@ -1637,5 +1709,52 @@ class LocalDatabase {
       {'key': key, 'value': value},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  // ==========================================
+  // CLEAR LOCAL DATA & STORAGE RESET
+  // ==========================================
+
+  Future<void> clearAllLocalData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('expenses');
+      await txn.delete('expense_categories');
+      await txn.delete('categories');
+      await txn.delete('menu_items');
+      await txn.delete('customers');
+      await txn.delete('orders');
+      await txn.delete('monthly_budgets');
+      await txn.delete('sync_metadata');
+    });
+
+    // Re-seed default expense categories
+    const defaultCats = [
+      'Rent',
+      'Salary',
+      'Grocery',
+      'Chicken',
+      'Mutton',
+      'Vegetables',
+      'Gas',
+      'Packaging',
+      'Transport',
+      'Maintenance',
+      'Miscellaneous',
+    ];
+    final now = DateTime.now().toIso8601String();
+    for (final cat in defaultCats) {
+      await db.insert('expense_categories', {
+        'id': _uuid.v4(),
+        'server_id': null,
+        'name': cat,
+        'icon': 'receipt_long',
+        'is_active': 1,
+        'created_at': now,
+        'updated_at': now,
+        'sync_status': 'synced',
+        'deleted_at': null,
+      });
+    }
   }
 }

@@ -452,17 +452,19 @@ class _CustomerManagementScreenState
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'customer_fab',
-        onPressed: () => _showCustomerFormDialog(),
-        backgroundColor: AppColors.primary,
-        icon: const Icon(Icons.person_add_rounded, color: Colors.white),
-        label: const Text(
-          'Add Customer',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        elevation: 6,
-      ),
+      floatingActionButton: customerState.customers.isNotEmpty
+          ? FloatingActionButton.extended(
+              heroTag: 'customer_fab',
+              onPressed: () => _showCustomerFormDialog(),
+              backgroundColor: AppColors.primary,
+              icon: const Icon(Icons.person_add_rounded, color: Colors.white),
+              label: const Text(
+                'Add Customer',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              elevation: 6,
+            )
+          : null,
       body: Column(
         children: [
           Padding(

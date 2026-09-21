@@ -141,17 +141,19 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'menu_fab',
-        onPressed: () => _showItemFormDialog(),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          'Add Item',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: AppColors.primary,
-        elevation: 6,
-      ),
+      floatingActionButton: state.items.isNotEmpty
+          ? FloatingActionButton.extended(
+              heroTag: 'menu_fab',
+              onPressed: () => _showItemFormDialog(),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text(
+                'Add Item',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: AppColors.primary,
+              elevation: 6,
+            )
+          : null,
       body: Column(
         children: [
           _MenuSearchBar(

@@ -62,20 +62,23 @@ class SyncNotifier extends StateNotifier<SyncState> {
       if (isOnline) {
         await refreshStatus();
         if (state.pendingCount > 0 && !state.isSyncing) {
-          uploadToCloud();
+          uploadToCloud(pushOnly: true);
         }
       }
     });
   }
 
-  Future<void> autoSyncIfOnline() async {
+  /// Automatically uploads local pending changes in background whenever app is open and online.
+  /// Runs fully asynchronous and non-blocking — local database remains fast and offline.
+  Future<void> autoSyncIfOnline({bool force = false}) async {
     try {
       if (state.isSyncing) return;
       final isOnline = await _connectivity.isConnected();
       if (!isOnline) return;
+
       final pendingCount = await LocalDatabase.instance.getPendingChangesCount();
       if (pendingCount > 0 && !state.isSyncing) {
-        uploadToCloud();
+        uploadToCloud(pushOnly: true);
       }
     } catch (_) {}
   }
@@ -98,9 +101,9 @@ class SyncNotifier extends StateNotifier<SyncState> {
     } catch (_) {}
   }
 
-  Future<SyncResult> uploadToCloud() async {
+  Future<SyncResult> uploadToCloud({bool pushOnly = true}) async {
     state = state.copyWith(isSyncing: true, syncMessage: 'Uploading...');
-    final result = await _syncManager.sync();
+    final result = pushOnly ? await _syncManager.pushOnly() : await _syncManager.sync();
 
     await refreshStatus();
 
@@ -110,8 +113,8 @@ class SyncNotifier extends StateNotifier<SyncState> {
       lastResult: result,
     );
 
-    // If changes were uploaded or pulled, quietly refresh active Riverpod providers from Local DB
-    if (result.success) {
+    // If full two-way sync was explicitly invoked, refresh providers
+    if (result.success && !pushOnly) {
       _ref.read(expenseProvider.notifier).loadAll(forceSpinner: false);
       _ref.read(customerProvider.notifier).loadCustomers(forceSpinner: false);
       _ref.read(menuProvider.notifier).loadCategoriesAndItems(forceSpinner: false);

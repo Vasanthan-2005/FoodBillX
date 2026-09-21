@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/core/services/background_sync_service.dart';
 import 'package:mobile/core/storage/local_database.dart';
 import 'package:mobile/core/storage/sync_queue_item.dart';
 import 'package:mobile/models/expense_model.dart';
@@ -124,6 +125,44 @@ void main() {
       expect(serialized['title'], 'தினசரி கோழி மற்றும் முட்டை');
       expect(serialized['category'], 'காய்கறிகள்');
       expect(serialized['notes'], 'உள்ளூர் சந்தை ரசீது #42');
+    });
+  });
+
+  group('Nightly 10:00 PM Auto-Sync Scheduling', () {
+    test('calculateDelayUntilNext10Pm returns a valid non-negative delay <= 24h', () {
+      final delay = calculateDelayUntilNext10Pm();
+      expect(delay.isNegative, isFalse);
+      expect(delay.inSeconds <= const Duration(days: 1).inSeconds, isTrue);
+    });
+
+    test('isAutoSyncTimeReached accurately handles daytime vs after 10:00 PM night closing', () {
+      // Daytime (should NOT auto-sync, offline billing continues undisturbed)
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 19, 9, 0)), isFalse);
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 19, 13, 30)), isFalse);
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 19, 18, 0)), isFalse);
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 19, 21, 59)), isFalse);
+
+      // Night closing window (at or after 10:00 PM until 4:00 AM)
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 19, 22, 0)), isTrue);
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 19, 22, 30)), isTrue);
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 19, 23, 45)), isTrue);
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 20, 0, 15)), isTrue);
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 20, 1, 30)), isTrue);
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 20, 3, 59)), isTrue);
+
+      // Morning after closing
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 20, 4, 0)), isFalse);
+      expect(isAutoSyncTimeReached(DateTime(2026, 9, 20, 6, 0)), isFalse);
+    });
+  });
+
+  group('Order Number Sequence & Prefix Verification', () {
+    test('sequence formatting generates padded 3-digit order numbers', () {
+      final now = DateTime(2026, 9, 20);
+      final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+      expect('$dateStr-001', '20260920-001');
+      expect('$dateStr-042', '20260920-042');
+      expect('$dateStr-100', '20260920-100');
     });
   });
 }

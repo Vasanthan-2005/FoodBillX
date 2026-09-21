@@ -39,12 +39,11 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> with WidgetsB
     _pages = List<Widget?>.filled(5, null);
     _pages[_currentIndex] = _buildPage(_currentIndex);
 
-    // Initialize and keep the realtime sync service alive for the app session
+    // Initialize and keep services alive; push pending data in background if online
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(realtimeSyncProvider); // Ensures socket + polling starts
       OnboardingDialog.showIfNeeded(context);
-      // Quietly evaluate if daily 8 PM sync is due and run in background
-      BackgroundSyncService.checkAndRunForegroundEveningSync(ref.read(syncManagerProvider));
+      ref.read(syncProvider.notifier).autoSyncIfOnline();
     });
   }
 
@@ -113,17 +112,18 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> with WidgetsB
         key: const PageStorageKey('CustomerManagementScreen'),
         onOpenSettings: _openSettings,
       ),
-      3 => DashboardScreen(
-        key: const PageStorageKey('ReportsScreen'),
-        onGoToBilling: () => _onSelectTab(0),
-        onOpenSettings: _openSettings,
-      ),
-      4 => HomeDashboardScreen(
+      3 => HomeDashboardScreen(
         key: const PageStorageKey('HomeDashboardScreen'),
         onNavigateToTab: _onSelectTab,
         onOpenSettings: _openSettings,
         onOpenOrders: _openPreviousOrders,
         onOpenExpenses: _openExpenseTracker,
+        reportsTabIndex: 4,
+      ),
+      4 => DashboardScreen(
+        key: const PageStorageKey('ReportsScreen'),
+        onGoToBilling: () => _onSelectTab(0),
+        onOpenSettings: _openSettings,
       ),
       _ => const SizedBox.shrink(),
     };
@@ -167,17 +167,17 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> with WidgetsB
         label: 'Customers',
       ),
       NavigationDestination(
+        icon: Icon(Icons.dashboard_outlined),
+        selectedIcon: Icon(Icons.dashboard_rounded, color: AppColors.primary),
+        label: 'Dashboard',
+      ),
+      NavigationDestination(
         icon: Icon(Icons.bar_chart_outlined),
         selectedIcon: Icon(
           Icons.bar_chart_rounded,
           color: AppColors.primary,
         ),
         label: 'Reports',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.dashboard_outlined),
-        selectedIcon: Icon(Icons.dashboard_rounded, color: AppColors.primary),
-        label: 'Dashboard',
       ),
     ];
 

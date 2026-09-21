@@ -5,6 +5,7 @@ import '../models/expense_model.dart';
 import '../repositories/expense_category_repository.dart';
 import '../repositories/expense_repository.dart';
 import 'dashboard_provider.dart';
+import 'sync_provider.dart';
 
 class ExpenseState {
   final List<ExpenseModel> expenses;
@@ -142,6 +143,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
       await _expenseRepo.create(data);
       await loadAll(forceSpinner: false);
       _ref.read(dashboardProvider.notifier).refresh();
+      _ref.read(syncProvider.notifier).autoSyncIfOnline();
       return true;
     } catch (_) {
       return false;
@@ -153,6 +155,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
       await _expenseRepo.update(id, data);
       await loadAll(forceSpinner: false);
       _ref.read(dashboardProvider.notifier).refresh();
+      _ref.read(syncProvider.notifier).autoSyncIfOnline();
       return true;
     } catch (_) {
       return false;
@@ -164,6 +167,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
       await _expenseRepo.delete(id);
       await loadAll(forceSpinner: false);
       _ref.read(dashboardProvider.notifier).refresh();
+      _ref.read(syncProvider.notifier).autoSyncIfOnline();
       return true;
     } catch (_) {
       return false;
