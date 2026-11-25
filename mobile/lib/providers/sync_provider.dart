@@ -13,6 +13,8 @@ import 'settings_provider.dart';
 class SyncState {
   final bool isSyncing;
   final int pendingCount;
+  final int totalSyncCount;
+  final int pushedSyncCount;
   final DateTime? lastSyncedAt;
   final bool isOffline;
   final String? syncMessage;
@@ -21,15 +23,22 @@ class SyncState {
   const SyncState({
     this.isSyncing = false,
     this.pendingCount = 0,
+    this.totalSyncCount = 0,
+    this.pushedSyncCount = 0,
     this.lastSyncedAt,
     this.isOffline = false,
     this.syncMessage,
     this.lastResult,
   });
 
+  double? get syncProgress =>
+      totalSyncCount > 0 ? (pushedSyncCount / totalSyncCount).clamp(0.0, 1.0) : null;
+
   SyncState copyWith({
     bool? isSyncing,
     int? pendingCount,
+    int? totalSyncCount,
+    int? pushedSyncCount,
     DateTime? lastSyncedAt,
     bool? isOffline,
     String? syncMessage,
@@ -38,6 +47,8 @@ class SyncState {
     return SyncState(
       isSyncing: isSyncing ?? this.isSyncing,
       pendingCount: pendingCount ?? this.pendingCount,
+      totalSyncCount: totalSyncCount ?? this.totalSyncCount,
+      pushedSyncCount: pushedSyncCount ?? this.pushedSyncCount,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       isOffline: isOffline ?? this.isOffline,
       syncMessage: syncMessage ?? this.syncMessage,
@@ -72,13 +83,16 @@ class SyncNotifier extends StateNotifier<SyncState> {
   /// Runs fully asynchronous and non-blocking — local database remains fast and offline.
   Future<void> autoSyncIfOnline({bool force = false}) async {
     try {
-      if (state.isSyncing) return;
-      final isOnline = await _connectivity.isConnected();
-      if (!isOnline) return;
-
       final pendingCount = await LocalDatabase.instance.getPendingChangesCount();
-      if (pendingCount > 0 && !state.isSyncing) {
-        uploadToCloud(pushOnly: true);
+      final isOnline = await _connectivity.isConnected();
+      state = state.copyWith(
+        isOffline: !isOnline,
+        pendingCount: pendingCount,
+      );
+      if (state.isSyncing || !isOnline) return;
+
+      if (pendingCount > 0) {
+        await uploadToCloud(pushOnly: true);
       }
     } catch (_) {}
   }
@@ -102,13 +116,37 @@ class SyncNotifier extends StateNotifier<SyncState> {
   }
 
   Future<SyncResult> uploadToCloud({bool pushOnly = true}) async {
-    state = state.copyWith(isSyncing: true, syncMessage: 'Uploading...');
-    final result = pushOnly ? await _syncManager.pushOnly() : await _syncManager.sync();
+    final initialPending = await LocalDatabase.instance.getPendingChangesCount();
+    state = state.copyWith(
+      isSyncing: true,
+      pendingCount: initialPending,
+      totalSyncCount: initialPending,
+      pushedSyncCount: 0,
+      syncMessage: initialPending > 0
+          ? 'Uploading... $initialPending remaining'
+          : 'Checking for updates...',
+    );
+
+    void handleProgress(int remaining, int pushed, int failed) {
+      state = state.copyWith(
+        pendingCount: remaining,
+        pushedSyncCount: pushed + failed,
+        syncMessage: remaining > 0
+            ? 'Uploading... $pushed sent, $remaining remaining'
+            : 'Finishing upload...',
+      );
+    }
+
+    final result = pushOnly
+        ? await _syncManager.pushOnly(onProgress: handleProgress)
+        : await _syncManager.sync(onProgress: handleProgress);
 
     await refreshStatus();
 
     state = state.copyWith(
       isSyncing: false,
+      totalSyncCount: 0,
+      pushedSyncCount: 0,
       syncMessage: result.message,
       lastResult: result,
     );

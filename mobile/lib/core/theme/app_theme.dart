@@ -3,17 +3,47 @@ import 'package:google_fonts/google_fonts.dart';
 import '../constants/app_colors.dart';
 
 /// Available app themes.
-enum AppThemeMode { dark, light, saffronDark, emeraldDark }
+enum AppThemeMode { dark, amoledDark, light, saffronDark, emeraldDark }
 
 class AppTheme {
   /// Returns the [ThemeData] for the given [AppThemeMode].
   static ThemeData getTheme(AppThemeMode mode) {
     return switch (mode) {
       AppThemeMode.dark => darkTheme,
+      AppThemeMode.amoledDark => amoledDarkTheme,
       AppThemeMode.light => lightTheme,
       AppThemeMode.saffronDark => saffronDarkTheme,
       AppThemeMode.emeraldDark => emeraldDarkTheme,
     };
+  }
+
+  /// True whenever the active theme uses pitch-black AMOLED surfaces.
+  static bool isAmoledTheme(BuildContext context) {
+    return Theme.of(context).scaffoldBackgroundColor == AppColors.amoledBackground;
+  }
+
+  /// Border color matching the currently active theme (stronger contrast in AMOLED).
+  static Color cardBorderColor(BuildContext context) {
+    final theme = Theme.of(context);
+    if (isAmoledTheme(context)) return AppColors.amoledBorder;
+    return theme.brightness == Brightness.dark
+        ? AppColors.darkBorder
+        : AppColors.lightBorder;
+  }
+
+  /// Card shape that preserves the active theme's tile outline across custom radii.
+  static RoundedRectangleBorder cardShape(
+    BuildContext context, {
+    double radius = 16,
+  }) {
+    final amoled = isAmoledTheme(context);
+    return RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(radius),
+      side: BorderSide(
+        color: cardBorderColor(context),
+        width: amoled ? 1.15 : 1.0,
+      ),
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -371,6 +401,160 @@ class AppTheme {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.emeraldPrimary, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.error),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // Ultra Dark (AMOLED) Theme
+  // ─────────────────────────────────────────────────────────────────
+  static ThemeData get amoledDarkTheme {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: const ColorScheme.dark(
+        primary: AppColors.primary,
+        secondary: AppColors.secondary,
+        surface: AppColors.amoledSurface,
+        surfaceContainerLowest: AppColors.amoledBackground,
+        surfaceContainerLow: AppColors.amoledCard,
+        surfaceContainer: AppColors.amoledCard,
+        surfaceContainerHigh: AppColors.amoledCard,
+        surfaceContainerHighest: Color(0xFF1C1E29),
+        error: AppColors.error,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
+        onSurface: AppColors.amoledTextPrimary,
+        outline: AppColors.amoledBorder,
+      ),
+      scaffoldBackgroundColor: AppColors.amoledBackground,
+      canvasColor: AppColors.amoledBackground,
+      cardColor: AppColors.amoledCard,
+      dividerColor: AppColors.amoledBorder,
+      dividerTheme: const DividerThemeData(
+        color: AppColors.amoledBorder,
+        thickness: 1,
+      ),
+      textTheme: GoogleFonts.outfitTextTheme(ThemeData.dark().textTheme)
+          .copyWith(
+            displayLarge: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.amoledTextPrimary,
+            ),
+            titleLarge: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: AppColors.amoledTextPrimary,
+            ),
+            bodyLarge: const TextStyle(color: AppColors.amoledTextPrimary),
+            bodyMedium: const TextStyle(color: AppColors.amoledTextSecondary),
+          ),
+      cardTheme: CardThemeData(
+        color: AppColors.amoledCard,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.amoledBorder, width: 1.15),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.amoledCard,
+        disabledColor: AppColors.amoledBackground,
+        selectedColor: AppColors.primary,
+        secondarySelectedColor: AppColors.primary,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppColors.amoledBorder, width: 1),
+        ),
+        labelStyle: const TextStyle(
+          color: AppColors.amoledTextPrimary,
+          fontSize: 12,
+        ),
+        secondaryLabelStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: AppColors.amoledCard,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppColors.amoledBorder, width: 1),
+        ),
+      ),
+      listTileTheme: const ListTileThemeData(
+        iconColor: AppColors.amoledTextPrimary,
+        textColor: AppColors.amoledTextPrimary,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: AppColors.amoledBackground,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: false,
+        titleTextStyle: GoogleFonts.outfit(
+          color: AppColors.amoledTextPrimary,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
+        iconTheme: const IconThemeData(color: AppColors.amoledTextPrimary),
+      ),
+      navigationBarTheme: const NavigationBarThemeData(
+        backgroundColor: AppColors.amoledBackground,
+        surfaceTintColor: Colors.transparent,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.amoledCard,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppColors.amoledBorder, width: 1),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.amoledCard,
+        surfaceTintColor: Colors.transparent,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          minimumSize: const Size(0, 52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: GoogleFonts.outfit(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.amoledCard,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.amoledBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.amoledBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),

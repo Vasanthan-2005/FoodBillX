@@ -38,6 +38,10 @@ class DashboardState {
   final List<double> monthlyWeeklyRevenue;
   final List<Map<String, dynamic>> topSellingItems;
   final List<Map<String, dynamic>> leastSellingItems;
+  final List<Map<String, dynamic>> todayDishBreakdown;
+  final List<Map<String, dynamic>> weekDishBreakdown;
+  final List<Map<String, dynamic>> monthDishBreakdown;
+  final List<Map<String, dynamic>> overallDishBreakdown;
   final Map<String, dynamic> customerAnalytics;
   final Map<String, dynamic> paymentAnalytics;
   final List<Map<String, dynamic>> expenseBreakdown;
@@ -76,6 +80,10 @@ class DashboardState {
     this.monthlyWeeklyRevenue = const [],
     this.topSellingItems = const [],
     this.leastSellingItems = const [],
+    this.todayDishBreakdown = const [],
+    this.weekDishBreakdown = const [],
+    this.monthDishBreakdown = const [],
+    this.overallDishBreakdown = const [],
     this.customerAnalytics = const {},
     this.paymentAnalytics = const {},
     this.expenseBreakdown = const [],
@@ -114,6 +122,10 @@ class DashboardState {
     List<double>? monthlyWeeklyRevenue,
     List<Map<String, dynamic>>? topSellingItems,
     List<Map<String, dynamic>>? leastSellingItems,
+    List<Map<String, dynamic>>? todayDishBreakdown,
+    List<Map<String, dynamic>>? weekDishBreakdown,
+    List<Map<String, dynamic>>? monthDishBreakdown,
+    List<Map<String, dynamic>>? overallDishBreakdown,
     Map<String, dynamic>? customerAnalytics,
     Map<String, dynamic>? paymentAnalytics,
     List<Map<String, dynamic>>? expenseBreakdown,
@@ -151,6 +163,10 @@ class DashboardState {
       monthlyWeeklyRevenue: monthlyWeeklyRevenue ?? this.monthlyWeeklyRevenue,
       topSellingItems: topSellingItems ?? this.topSellingItems,
       leastSellingItems: leastSellingItems ?? this.leastSellingItems,
+      todayDishBreakdown: todayDishBreakdown ?? this.todayDishBreakdown,
+      weekDishBreakdown: weekDishBreakdown ?? this.weekDishBreakdown,
+      monthDishBreakdown: monthDishBreakdown ?? this.monthDishBreakdown,
+      overallDishBreakdown: overallDishBreakdown ?? this.overallDishBreakdown,
       customerAnalytics: customerAnalytics ?? this.customerAnalytics,
       paymentAnalytics: paymentAnalytics ?? this.paymentAnalytics,
       expenseBreakdown: expenseBreakdown ?? this.expenseBreakdown,
@@ -210,6 +226,18 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     final rawLeast = summary['leastSellingItems'] as List? ?? [];
     final leastSellingItems = rawLeast.map((e) => Map<String, dynamic>.from(e)).toList();
 
+    final rawTodayDishes = summary['todayDishBreakdown'] as List? ?? [];
+    final todayDishBreakdown = rawTodayDishes.map((e) => Map<String, dynamic>.from(e)).toList();
+
+    final rawWeekDishes = summary['weekDishBreakdown'] as List? ?? [];
+    final weekDishBreakdown = rawWeekDishes.map((e) => Map<String, dynamic>.from(e)).toList();
+
+    final rawMonthDishes = summary['monthDishBreakdown'] as List? ?? [];
+    final monthDishBreakdown = rawMonthDishes.map((e) => Map<String, dynamic>.from(e)).toList();
+
+    final rawOverallDishes = summary['overallDishBreakdown'] as List? ?? [];
+    final overallDishBreakdown = rawOverallDishes.map((e) => Map<String, dynamic>.from(e)).toList();
+
     final customerAnalytics = summary['customerAnalytics'] is Map
         ? Map<String, dynamic>.from(summary['customerAnalytics'])
         : <String, dynamic>{};
@@ -264,6 +292,10 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
       monthlyWeeklyRevenue: monthlyWeeklyRevenue.isNotEmpty ? monthlyWeeklyRevenue : List.filled(5, 0.0),
       topSellingItems: topSellingItems,
       leastSellingItems: leastSellingItems,
+      todayDishBreakdown: todayDishBreakdown,
+      weekDishBreakdown: weekDishBreakdown,
+      monthDishBreakdown: monthDishBreakdown,
+      overallDishBreakdown: overallDishBreakdown,
       customerAnalytics: customerAnalytics,
       paymentAnalytics: paymentAnalytics,
       expenseBreakdown: expenseBreakdown,

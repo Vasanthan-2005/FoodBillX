@@ -4,6 +4,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'currency_formatter.dart';
+
 class PdfInvoiceHelper {
   static Future<File> generateInvoicePdf({
     required String businessName,
@@ -120,12 +122,18 @@ class PdfInvoiceHelper {
                 data: items.asMap().entries.map((entry) {
                   final idx = entry.key + 1;
                   final item = entry.value;
+                  final unitPrice = (item['price'] as num?)?.toDouble() ??
+                      double.tryParse('${item['price']}') ??
+                      0.0;
+                  final lineSubtotal = (item['subtotal'] as num?)?.toDouble() ??
+                      double.tryParse('${item['subtotal']}') ??
+                      0.0;
                   return [
                     '$idx',
                     item['name'],
                     '${item['quantity']}',
-                    'Rs. ${item['price']}',
-                    'Rs. ${item['subtotal']}',
+                    CurrencyFormatter.format(unitPrice, currencySymbol: 'Rs.'),
+                    CurrencyFormatter.format(lineSubtotal, currencySymbol: 'Rs.'),
                   ];
                 }).toList(),
                 headerStyle: pw.TextStyle(
@@ -158,7 +166,7 @@ class PdfInvoiceHelper {
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
                             pw.Text('Subtotal:'),
-                            pw.Text('Rs. ${subtotal.toStringAsFixed(2)}'),
+                            pw.Text(CurrencyFormatter.format(subtotal, currencySymbol: 'Rs.')),
                           ],
                         ),
                         if (discount > 0) ...[
@@ -167,7 +175,7 @@ class PdfInvoiceHelper {
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
                               pw.Text('Discount:'),
-                              pw.Text('- Rs. ${discount.toStringAsFixed(2)}'),
+                              pw.Text('- ${CurrencyFormatter.format(discount, currencySymbol: 'Rs.')}'),
                             ],
                           ),
                         ],
@@ -178,7 +186,7 @@ class PdfInvoiceHelper {
                             children: [
                               pw.Text('Service charge:'),
                               pw.Text(
-                                '+ Rs. ${serviceChargeAmount.toStringAsFixed(2)}',
+                                '+ ${CurrencyFormatter.format(serviceChargeAmount, currencySymbol: 'Rs.')}',
                               ),
                             ],
                           ),
@@ -195,7 +203,7 @@ class PdfInvoiceHelper {
                               ),
                             ),
                             pw.Text(
-                              'Rs. ${grandTotal.toStringAsFixed(2)}',
+                              CurrencyFormatter.format(grandTotal, currencySymbol: 'Rs.'),
                               style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 16,

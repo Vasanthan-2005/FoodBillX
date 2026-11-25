@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/business_settings_model.dart';
 import '../repositories/settings_repository.dart';
+import 'sync_provider.dart';
 
 class SettingsState {
   final BusinessSettingsModel? settings;
@@ -24,8 +25,9 @@ class SettingsState {
 
 class SettingsNotifier extends StateNotifier<SettingsState> {
   final SettingsRepository _repo;
+  final Ref _ref;
 
-  SettingsNotifier(this._repo) : super(SettingsState()) {
+  SettingsNotifier(this._repo, this._ref) : super(SettingsState()) {
     loadSettings();
   }
 
@@ -51,6 +53,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     try {
       final updated = await _repo.upsert(updateData);
       state = state.copyWith(settings: updated, isLoading: false);
+      _ref.read(syncProvider.notifier).refreshStatus();
       return true;
     } catch (_) {
       state = state.copyWith(isLoading: false);
@@ -62,6 +65,6 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>(
   (ref) {
     final repo = ref.watch(settingsRepositoryProvider);
-    return SettingsNotifier(repo);
+    return SettingsNotifier(repo, ref);
   },
 );

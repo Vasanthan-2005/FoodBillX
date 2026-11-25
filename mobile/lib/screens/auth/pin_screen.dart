@@ -303,9 +303,12 @@ class PinScreen extends ConsumerWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isDark ? AppColors.darkCard : AppColors.lightCard,
+            color: Theme.of(context).cardTheme.color ??
+                (isDark ? AppColors.darkCard : AppColors.lightCard),
             border: Border.all(
-              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+              color: isDark
+                  ? Theme.of(context).dividerColor
+                  : AppColors.lightBorder,
             ),
           ),
           child: Text(
@@ -323,6 +326,8 @@ class PinScreen extends ConsumerWidget {
     VoidCallback onTap,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = Theme.of(context).cardTheme.color ??
+        (isDark ? AppColors.darkCard : AppColors.lightCard);
 
     return Material(
       color: Colors.transparent,
@@ -335,9 +340,7 @@ class PinScreen extends ConsumerWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isDark
-                ? AppColors.darkCard.withAlpha(50)
-                : AppColors.lightCard,
+            color: isDark ? cardColor.withAlpha(80) : cardColor,
           ),
           child: Icon(
             icon,

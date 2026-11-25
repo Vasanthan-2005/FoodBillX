@@ -9,7 +9,7 @@ exports.verifyOwnerIdentity = async (req, res, next) => {
   try {
     const { phone } = req.body;
 
-    if (!phone || typeof phone !== 'string' || phone.trim().isEmpty) {
+    if (!phone || typeof phone !== 'string' || !phone.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Registered store phone number is required.',

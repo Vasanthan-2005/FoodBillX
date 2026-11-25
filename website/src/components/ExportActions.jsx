@@ -1,85 +1,196 @@
 import React, { useState } from 'react';
-import { Download, Printer, FileText, FileSpreadsheet, Database, CheckCircle2 } from 'lucide-react';
-import { exportOrdersToCSV, exportTopItemsToCSV, printReportPage } from '../utils/exportHelpers';
+import {
+  Download,
+  Printer,
+  FileText,
+  FileSpreadsheet,
+  Database,
+  CheckCircle2,
+  Users,
+} from 'lucide-react';
+import {
+  exportBusinessReportPDF,
+  exportCustomersToExcel,
+  exportFullBackupExcel,
+  exportOrdersToCSV,
+  exportOrdersToExcel,
+  exportTopItemsToCSV,
+  printReportPage,
+} from '../utils/exportHelpers';
 import { reportsService } from '../services/reportsService';
+import { formatNumber } from '../utils/formatters';
 
-export const ExportActions = ({ analytics = {}, syncStatus }) => {
+export const ExportActions = ({
+  analytics = {},
+  settings = {},
+  periodLabel = 'Selected Period',
+}) => {
   const { recentOrders = [], topSellingItems = [] } = analytics;
-  const [isExportingMongo, setIsExportingMongo] = useState(false);
-  const [mongoMessage, setMongoMessage] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState(null);
 
-  const handleExportMongo = async () => {
+  const showToast = (msg) => {
+    setStatusMessage(msg);
+    setTimeout(() => setStatusMessage(null), 5000);
+  };
+
+  const handleFullCloudExcelBackup = async () => {
     try {
-      setIsExportingMongo(true);
-      setMongoMessage(null);
+      setIsExporting(true);
+      const exportPayload = await reportsService.fetchCloudExport();
+      const cloudData = exportPayload?.data || exportPayload;
+      exportFullBackupExcel({
+        customers: cloudData.customers || [],
+        orders: cloudData.orders || [],
+        settings: cloudData.businessSettings || settings,
+      });
+      showToast(
+        `Full Excel backup downloaded (${formatNumber(
+          (cloudData.orders?.length || 0) + (cloudData.customers?.length || 0)
+        )} records).`
+      );
+    } catch (err) {
+      showToast(`Backup export failed: ${err.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleCustomersExcel = async () => {
+    try {
+      setIsExporting(true);
+      const res = await reportsService.getCustomers({ page: 1, limit: 200 });
+      exportCustomersToExcel(res.customers || []);
+      showToast(`Exported ${formatNumber(res.customers?.length || 0)} customer records.`);
+    } catch (err) {
+      showToast(`Customer export failed: ${err.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleOrdersExcel = async () => {
+    try {
+      setIsExporting(true);
+      const res = await reportsService.getOrders({ period: 'allTime', page: 1, limit: 200 });
+      exportOrdersToExcel(res.orders || recentOrders);
+      showToast('Orders workbook downloaded (.xlsx).');
+    } catch (err) {
+      exportOrdersToExcel(recentOrders);
+      showToast('Orders workbook downloaded from current period.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleCloudJson = async () => {
+    try {
+      setIsExporting(true);
       const data = await reportsService.exportMongoDBBackup();
       const total = data?.summary?.totalRecords ?? 'all';
-      setMongoMessage(`✓ Exported ${total} documents from MongoDB!`);
-      setTimeout(() => setMongoMessage(null), 5000);
+      showToast(`Exported ${formatNumber(total)} cloud documents as JSON.`);
     } catch (err) {
-      setMongoMessage(`Export failed: ${err.message}`);
-      setTimeout(() => setMongoMessage(null), 5000);
+      showToast(`JSON export failed: ${err.message}`);
     } finally {
-      setIsExportingMongo(false);
+      setIsExporting(false);
     }
   };
 
   return (
-    <section className="max-w-7xl mx-auto px-4 md:px-8 mb-12">
-      <div className="glass-card p-6 rounded-3xl flex flex-col gap-4 border border-slate-800">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Download className="w-5 h-5 text-[#FF5722]" />
-              <span>Export & Print Business Reports</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Download offline copies of your order logs, dish analytics, or a full MongoDB cloud database backup
-            </p>
-          </div>
+    <section className="max-w-7xl mx-auto px-4 md:px-8 mb-12 no-print">
+      <div className="cyber-card p-6 rounded-3xl flex flex-col gap-5 border border-white/10">
+        <div>
+          <h3 className="font-display text-base font-bold text-white flex items-center gap-2">
+            <Download className="w-5 h-5 text-[#FF6D00]" />
+            <span>Export Vault & Cloud Backup</span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Download Business Reports (PDF), Customer Data (Excel), Order Data (Excel/CSV), or Full Cloud Backups
+          </p>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* MongoDB Full Backup Export */}
-            <button
-              onClick={handleExportMongo}
-              disabled={isExportingMongo}
-              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-50"
-              title="Download full JSON dump of all collections in MongoDB"
-            >
-              <Database className={`w-4 h-4 ${isExportingMongo ? 'animate-bounce' : ''}`} />
-              <span>{isExportingMongo ? 'Exporting MongoDB...' : 'Export Full MongoDB (JSON)'}</span>
-            </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <button
+            type="button"
+            onClick={() => exportBusinessReportPDF({ analytics, settings, periodLabel })}
+            className="px-4 py-3 rounded-2xl bg-gradient-to-r from-[#FF6D00] to-[#FF9100] hover:brightness-110 text-white shadow-glow text-xs font-bold flex items-center justify-center gap-2 transition-all"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Business Report (PDF)</span>
+          </button>
 
+          <button
+            type="button"
+            onClick={handleOrdersExcel}
+            disabled={isExporting}
+            className="px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white border border-white/15 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <span>Order Data (Excel)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCustomersExcel}
+            disabled={isExporting}
+            className="px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white border border-white/15 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+          >
+            <Users className="w-4 h-4 text-cyan-400" />
+            <span>Customer Data (Excel)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleFullCloudExcelBackup}
+            disabled={isExporting}
+            className="px-4 py-3 rounded-2xl bg-purple-600/80 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/20 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Full Cloud Backup (Excel)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCloudJson}
+            disabled={isExporting}
+            className="px-4 py-3 rounded-2xl bg-emerald-600/80 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+          >
+            <Database className="w-4 h-4" />
+            <span>MongoDB Dump (JSON)</span>
+          </button>
+
+          <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => exportOrdersToCSV(recentOrders)}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-2 transition-all"
+              className="flex-1 px-3 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-slate-200 border border-white/15 text-xs font-bold flex items-center justify-center gap-1.5"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span>Export Orders CSV</span>
+              <Download className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Orders CSV</span>
             </button>
-
             <button
+              type="button"
               onClick={() => exportTopItemsToCSV(topSellingItems)}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-2 transition-all"
+              className="flex-1 px-3 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-slate-200 border border-white/15 text-xs font-bold flex items-center justify-center gap-1.5"
             >
-              <FileText className="w-4 h-4 text-blue-400" />
-              <span>Export Top Dishes CSV</span>
+              <Download className="w-3.5 h-3.5 text-amber-400" />
+              <span>Dishes CSV</span>
             </button>
-
             <button
+              type="button"
               onClick={printReportPage}
-              className="px-5 py-2.5 rounded-xl bg-[#FF5722] hover:bg-[#F4511E] text-white shadow-lg shadow-[#FF5722]/30 text-xs font-bold flex items-center gap-2 transition-all"
+              className="px-3.5 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white border border-white/15 text-xs font-bold"
+              title="Print Page"
             >
               <Printer className="w-4 h-4" />
-              <span>Print Report</span>
             </button>
           </div>
         </div>
 
-        {mongoMessage && (
-          <div className="px-4 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-2">
+        {statusMessage && (
+          <div className="px-4 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-semibold flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{mongoMessage}</span>
+            <span>{statusMessage}</span>
           </div>
         )}
       </div>

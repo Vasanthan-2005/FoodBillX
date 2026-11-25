@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
+import '../theme/app_theme.dart';
 import '../utils/currency_formatter.dart';
 
 class RevenueLineChartWidget extends StatelessWidget {
@@ -30,11 +31,17 @@ class RevenueLineChartWidget extends StatelessWidget {
 
   String _formatYLabel(double val) {
     if (val <= 0) return '0';
+    if (val >= 10000000) {
+      final cr = val / 10000000;
+      return '${cr >= 10 ? cr.toStringAsFixed(0) : cr.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '')}Cr';
+    }
     if (val >= 100000) {
-      return '${(val / 100000).toStringAsFixed(1)}L';
+      final l = val / 100000;
+      return '${l >= 10 ? l.toStringAsFixed(0) : l.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '')}L';
     }
     if (val >= 1000) {
-      return '${(val / 1000).toStringAsFixed(0)}K';
+      final k = val / 1000;
+      return '${k >= 10 ? k.toStringAsFixed(0) : k.toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '')}K';
     }
     return val.toStringAsFixed(0);
   }
@@ -53,10 +60,8 @@ class RevenueLineChartWidget extends StatelessWidget {
     });
 
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      elevation: AppTheme.isAmoledTheme(context) ? 0 : 2,
+      shape: AppTheme.cardShape(context, radius: 20),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
@@ -82,46 +87,55 @@ class RevenueLineChartWidget extends StatelessWidget {
                 ),
                 if (totalProfit != null && (expenseAmount ?? 0) > 0) ...[
                   const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Text(
-                        'Total Profit',
-                        style: TextStyle(fontSize: 10, color: Colors.grey),
-                      ),
-                      Text(
-                        CurrencyFormatter.format(totalProfit!),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12,
-                          color: totalProfit! >= 0
-                              ? AppColors.secondary
-                              : Colors.red,
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text(
+                          'Total Profit',
+                          style: TextStyle(fontSize: 10, color: Colors.grey),
                         ),
-                      ),
-                    ],
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            CurrencyFormatter.format(totalProfit!),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                              color: totalProfit! >= 0
+                                  ? AppColors.secondary
+                                  : Colors.red,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ],
             ),
             const SizedBox(height: 6),
 
-            // Revenue Amount + % Change Pill Badge (using Wrap to prevent overflow)
+            // Revenue Amount + % Change Pill Badge (using Wrap + FittedBox to prevent overflow)
             Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 10,
-              runSpacing: 4,
+              runSpacing: 6,
               children: [
-                Text(
-                  CurrencyFormatter.format(totalRevenue),
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    CurrencyFormatter.format(totalRevenue),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 ),
-                if (percentageChange != 0.0) ...[
-                  const SizedBox(width: 10),
+                if (percentageChange != 0.0)
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -145,20 +159,23 @@ class RevenueLineChartWidget extends StatelessWidget {
                         ),
                         if (percentageSubtitle.isNotEmpty) ...[
                           const SizedBox(width: 4),
-                          Text(
-                            percentageSubtitle,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: isPositivePct
-                                  ? Colors.green.shade800
-                                  : Colors.red.shade800,
+                          Flexible(
+                            child: Text(
+                              percentageSubtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isPositivePct
+                                    ? Colors.green.shade800
+                                    : Colors.red.shade800,
+                              ),
                             ),
                           ),
                         ],
                       ],
                     ),
                   ),
-                ],
               ],
             ),
             const SizedBox(height: 24),
@@ -245,19 +262,26 @@ class RevenueLineChartWidget extends StatelessWidget {
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 36,
+                        reservedSize: 44,
                         interval: (maxY / 4) <= 0 ? 25 : (maxY / 4),
                         getTitlesWidget: (value, meta) {
                           if (value == meta.max || value == meta.min) {
                             return const SizedBox.shrink();
                           }
-                          return Text(
-                            _formatYLabel(value),
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: isDark
-                                  ? AppColors.darkTextSecondary
-                                  : AppColors.lightTextSecondary,
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                _formatYLabel(value),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isDark
+                                      ? AppColors.darkTextSecondary
+                                      : AppColors.lightTextSecondary,
+                                ),
+                              ),
                             ),
                           );
                         },

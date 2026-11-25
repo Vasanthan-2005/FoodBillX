@@ -1,14 +1,19 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/app_update_service.dart';
 import '../../core/storage/local_database.dart';
+import '../../core/services/onboarding_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/report_export_helper.dart';
 import '../../core/utils/snackbar_utils.dart';
+import '../../core/widgets/custom_date_range_dialog.dart';
 import '../../core/widgets/onboarding_dialog.dart';
 import '../../providers/billing_provider.dart';
 import '../../providers/customer_provider.dart';
@@ -21,6 +26,24 @@ import '../../providers/sync_provider.dart';
 import '../../providers/menu_provider.dart';
 import '../../providers/theme_provider.dart';
 import 'widgets/app_update_dialog.dart';
+
+enum ExportCategory {
+  orders,
+  customers,
+  reports,
+  backup,
+}
+
+enum ExportDateRange {
+  allTime,
+  today,
+  thisMonth,
+  last1Month,
+  last2Months,
+  last3Months,
+  last6Months,
+  custom,
+}
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -43,6 +66,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _didPopulateSettings = false;
   bool _isExporting = false;
   bool _isImporting = false;
+  Timer? _syncPollTimer;
 
   @override
   void initState() {
@@ -58,6 +82,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _loyaltyVisitsController = TextEditingController(text: settings?.loyaltyTargetVisits.toString() ?? '6');
     _rewardTextController = TextEditingController(text: settings?.loyaltyRewardDescription ?? 'Free Drink');
     _didPopulateSettings = settings != null;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(syncProvider.notifier).refreshStatus();
+      }
+    });
+    _syncPollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted) {
+        ref.read(syncProvider.notifier).refreshStatus();
+      }
+    });
   }
 
   void _populateSettings(SettingsState state) {
@@ -77,6 +112,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   void dispose() {
+    _syncPollTimer?.cancel();
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
@@ -356,6 +392,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         accentColor: AppColors.primary,
       ),
       _ThemeOption(
+        mode: AppThemeMode.amoledDark,
+        label: 'Ultra Dark',
+        icon: Icons.contrast_rounded,
+        colors: [AppColors.amoledBackground, AppColors.amoledCard, AppColors.amoledBorder],
+        accentColor: AppColors.primary,
+      ),
+      _ThemeOption(
         mode: AppThemeMode.light,
         label: 'Light',
         icon: Icons.light_mode_rounded,
@@ -394,38 +437,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 14),
             Row(
-              children: themes.map((t) {
+              children: themes.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final t = entry.value;
                 final isSelected = currentTheme == t.mode;
                 return Expanded(
                   child: Padding(
-                    padding: EdgeInsets.only(
-                      right: t.mode != AppThemeMode.emeraldDark ? 8 : 0,
-                    ),
+                    padding: EdgeInsets.only(right: idx < themes.length - 1 ? 6 : 0),
                     child: GestureDetector(
                       onTap: () => ref.read(themeProvider.notifier).setTheme(t.mode),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
                         curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isSelected
                                 ? t.accentColor
                                 : Theme.of(context).dividerColor.withAlpha(60),
-                            width: isSelected ? 2.5 : 1,
+                            width: isSelected ? 2.2 : 1,
                           ),
                           color: isSelected
                               ? t.accentColor.withAlpha(20)
                               : Colors.transparent,
                         ),
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             // Mini theme preview
                             Container(
-                              height: 36,
+                              height: 28,
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(7),
                                 gradient: LinearGradient(
                                   colors: t.colors,
                                   begin: Alignment.topLeft,
@@ -438,8 +482,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                               child: Center(
                                 child: Container(
-                                  width: 18,
-                                  height: 6,
+                                  width: 14,
+                                  height: 5,
                                   decoration: BoxDecoration(
                                     color: t.accentColor,
                                     borderRadius: BorderRadius.circular(3),
@@ -447,29 +491,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                             Icon(
                               t.icon,
-                              size: 18,
+                              size: 16,
                               color: isSelected
                                   ? t.accentColor
                                   : Theme.of(context).colorScheme.onSurface.withAlpha(140),
                             ),
                             const SizedBox(height: 3),
-                            Text(
-                              t.label,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                color: isSelected
-                                    ? t.accentColor
-                                    : Theme.of(context).colorScheme.onSurface.withAlpha(160),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                t.label,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  color: isSelected
+                                      ? t.accentColor
+                                      : Theme.of(context).colorScheme.onSurface.withAlpha(160),
+                                ),
                               ),
                             ),
-                            if (isSelected) ...[
-                              const SizedBox(height: 4),
-                              Icon(Icons.check_circle_rounded, size: 16, color: t.accentColor),
-                            ],
+                            const SizedBox(height: 3),
+                            Icon(
+                              Icons.check_circle_rounded,
+                              size: 13,
+                              color: isSelected ? t.accentColor : Colors.transparent,
+                            ),
                           ],
                         ),
                       ),
@@ -523,28 +573,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        syncState.isOffline
-                            ? 'Offline'
-                            : (syncState.pendingCount > 0
-                                ? '● ${syncState.pendingCount} changes queued for upload'
-                                : '✓ Synced with Cloud'),
+                        syncState.isSyncing
+                            ? 'Uploading... (${CurrencyFormatter.formatInteger(syncState.pendingCount)} remaining)'
+                            : (syncState.isOffline
+                                ? (syncState.pendingCount > 0
+                                    ? 'Offline • ${CurrencyFormatter.formatInteger(syncState.pendingCount)} queued'
+                                    : 'Offline')
+                                : (syncState.pendingCount > 0
+                                    ? '● ${CurrencyFormatter.formatInteger(syncState.pendingCount)} changes queued for upload'
+                                    : '✓ Synced with Cloud')),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
-                          color: syncState.isOffline
-                              ? Colors.grey
-                              : (syncState.pendingCount > 0
-                                  ? Colors.amber.shade900
-                                  : Colors.green.shade700),
+                          color: syncState.isSyncing
+                              ? Theme.of(context).colorScheme.primary
+                              : (syncState.isOffline
+                                  ? Colors.grey
+                                  : (syncState.pendingCount > 0
+                                      ? Colors.amber.shade900
+                                      : Colors.green.shade700)),
                         ),
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        syncState.isOffline
-                            ? 'Your data is safely stored on this device.'
-                            : (syncState.lastSyncedAt != null
-                                ? 'Auto-uploads in background when online • Last: ${_formatLastSync(syncState.lastSyncedAt!)}'
-                                : 'Auto-uploads in background when online • Not synced yet'),
+                        syncState.isSyncing
+                            ? (syncState.syncMessage ?? 'Uploading pending data in batches...')
+                            : (syncState.isOffline
+                                ? 'Your data is safely stored on this device.'
+                                : (syncState.lastSyncedAt != null
+                                    ? 'Auto-uploads in background when online • Last: ${_formatLastSync(syncState.lastSyncedAt!)}'
+                                    : 'Auto-uploads in background when online • Not synced yet')),
                         style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                       ),
                     ],
@@ -552,6 +610,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ],
             ),
+            if (syncState.isSyncing) ...[
+              const SizedBox(height: 12),
+              _RunningSyncProgressBar(
+                progress: syncState.syncProgress,
+                pushedCount: syncState.pushedSyncCount,
+                totalCount: syncState.totalSyncCount,
+              ),
+            ],
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -837,159 +903,242 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // Export Data Popup (3 Options: Business Reports, Orders, Customers)
+  // ─────────────────────────────────────────────────────────────────
+  // Export Data Popup (Dropdown selectors: Category, Date Slicer & Format)
   // ─────────────────────────────────────────────────────────────────
   void _showExportDialog(BuildContext context, String businessName) {
+    ExportCategory selectedCategory = ExportCategory.orders;
+    ExportDateRange selectedDateRange = ExportDateRange.allTime;
+    ExportFormat selectedFormat = ExportFormat.excel;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    DateTime customFromDate = today.subtract(const Duration(days: 6));
+    DateTime customToDate = today;
+
     showDialog(
       context: context,
       builder: (dialogCtx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-          contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final isBackup = selectedCategory == ExportCategory.backup;
+            final isCustomerOnly = selectedCategory == ExportCategory.customers;
+            final effectiveFormat = isBackup ? ExportFormat.excel : selectedFormat;
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(Icons.file_download_outlined, color: Colors.teal, size: 24),
-                  SizedBox(width: 10),
-                  Text('Export Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  const Row(
+                    children: [
+                      Icon(Icons.file_download_outlined, color: Colors.teal, size: 24),
+                      SizedBox(width: 10),
+                      Text('Export Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(dialogCtx),
+                  ),
                 ],
               ),
-              IconButton(
-                icon: const Icon(Icons.close_rounded, size: 20),
-                onPressed: () => Navigator.pop(dialogCtx),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Choose export category, date timeframe, and file format:',
+                      style: TextStyle(fontSize: 12.5, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 1. Report Category Dropdown
+                    _buildDropdownSection(
+                      context: context,
+                      label: 'Export Category',
+                      icon: Icons.category_outlined,
+                      child: DropdownButton<ExportCategory>(
+                        value: selectedCategory,
+                        isExpanded: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                        items: const [
+                          DropdownMenuItem(
+                            value: ExportCategory.reports,
+                            child: Text('Business Report', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          ),
+                          DropdownMenuItem(
+                            value: ExportCategory.customers,
+                            child: Text('Customer Data', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          ),
+                          DropdownMenuItem(
+                            value: ExportCategory.orders,
+                            child: Text('Order Data', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          ),
+                          DropdownMenuItem(
+                            value: ExportCategory.backup,
+                            child: Text('Full Backup (Excel only)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedCategory = val;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 2. Date Range / Timeframe Slicer Dropdown
+                    _buildDropdownSection(
+                      context: context,
+                      label: isCustomerOnly ? 'Customer Scope' : 'Date Range (Timeframe)',
+                      icon: Icons.date_range_outlined,
+                      child: isCustomerOnly
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              child: Text('All Registered Customers', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                            )
+                          : DropdownButton<ExportDateRange>(
+                              value: selectedDateRange,
+                              isExpanded: true,
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                              items: const [
+                                DropdownMenuItem(value: ExportDateRange.allTime, child: Text('All Time (Full History)', style: TextStyle(fontSize: 13))),
+                                DropdownMenuItem(value: ExportDateRange.today, child: Text('Today Only', style: TextStyle(fontSize: 13))),
+                                DropdownMenuItem(value: ExportDateRange.thisMonth, child: Text('This Month', style: TextStyle(fontSize: 13))),
+                                DropdownMenuItem(value: ExportDateRange.last1Month, child: Text('Last 1 Month (Past 30 Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+                                DropdownMenuItem(value: ExportDateRange.last2Months, child: Text('Last 2 Months (Past 60 Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+                                DropdownMenuItem(value: ExportDateRange.last3Months, child: Text('Last 3 Months (Past 90 Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+                                DropdownMenuItem(value: ExportDateRange.last6Months, child: Text('Last 6 Months (Past 180 Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+                                DropdownMenuItem(value: ExportDateRange.custom, child: Text('Custom Date Range (From - To)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary))),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() {
+                                    selectedDateRange = val;
+                                  });
+                                }
+                              },
+                            ),
+                    ),
+                    if (!isCustomerOnly && selectedDateRange == ExportDateRange.custom) ...[
+                      const SizedBox(height: 12),
+                      InlineFromToDatePickers(
+                        fromDate: customFromDate,
+                        toDate: customToDate,
+                        onFromChanged: (d) {
+                          setDialogState(() {
+                            customFromDate = d;
+                            if (customToDate.isBefore(customFromDate)) {
+                              customToDate = customFromDate;
+                            }
+                          });
+                        },
+                        onToChanged: (d) {
+                          setDialogState(() => customToDate = d);
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+
+                    // 3. Format Dropdown (Excel vs PDF)
+                    _buildDropdownSection(
+                      context: context,
+                      label: 'File Format',
+                      icon: Icons.tune_rounded,
+                      child: isBackup
+                          ? Row(
+                              children: [
+                                Icon(Icons.table_chart_rounded, color: Colors.green.shade700, size: 18),
+                                const SizedBox(width: 8),
+                                const Text('Excel (.xlsx) - Full Archive', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(4)),
+                                  child: Text('Excel only', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
+                                ),
+                              ],
+                            )
+                          : DropdownButton<ExportFormat>(
+                              value: selectedFormat,
+                              isExpanded: true,
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: ExportFormat.excel,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.table_chart_rounded, color: Colors.green, size: 18),
+                                      SizedBox(width: 8),
+                                      Text('Excel Spreadsheet (.xlsx)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                ),
+                                DropdownMenuItem(
+                                  value: ExportFormat.pdf,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent, size: 18),
+                                      SizedBox(width: 8),
+                                      Text('Executive PDF (.pdf)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() {
+                                    selectedFormat = val;
+                                  });
+                                }
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Action Button
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: effectiveFormat == ExportFormat.excel ? Colors.green.shade700 : Colors.redAccent.shade700,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: Icon(effectiveFormat == ExportFormat.excel ? Icons.table_chart_rounded : Icons.picture_as_pdf_rounded, size: 18),
+                      label: Text(
+                        'Export ${_getCategoryName(selectedCategory)} (${effectiveFormat == ExportFormat.excel ? "Excel" : "PDF"})',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(dialogCtx);
+                        _handleExportExecution(
+                          businessName: businessName,
+                          category: selectedCategory,
+                          range: selectedDateRange,
+                          format: effectiveFormat,
+                          customFromDate: customFromDate,
+                          customToDate: customToDate,
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Select the data category you wish to export:',
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-
-                // Option 1: Business Reports
-                _buildPopupOptionCard(
-                  icon: Icons.analytics_outlined,
-                  iconColor: Colors.orangeAccent,
-                  title: '1. Business Reports',
-                  subtitle: 'Financial summary, revenue, profit & dish leaderboard',
-                  actions: [
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.green.shade700,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
-                      icon: const Icon(Icons.table_chart_outlined, size: 16),
-                      label: const Text('Excel (.csv)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.pop(dialogCtx);
-                        _exportSummaryExcel(businessName);
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.redAccent,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
-                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                      label: const Text('PDF Document', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.pop(dialogCtx);
-                        _exportSummaryPdf(businessName);
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Option 2: Order / Sales Data
-                _buildPopupOptionCard(
-                  icon: Icons.receipt_long_rounded,
-                  iconColor: Colors.blueAccent,
-                  title: '2. Order / Sales Data',
-                  subtitle: 'Complete bill register with customer, payment & items',
-                  actions: [
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.green.shade700,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
-                      icon: const Icon(Icons.table_chart_outlined, size: 16),
-                      label: const Text('Excel (.csv)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.pop(dialogCtx);
-                        _exportOrdersExcel(businessName);
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.redAccent,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
-                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                      label: const Text('PDF Ledger', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.pop(dialogCtx);
-                        _exportOrdersPdf(businessName);
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Option 3: Customer Data
-                _buildPopupOptionCard(
-                  icon: Icons.people_alt_outlined,
-                  iconColor: Colors.teal,
-                  title: '3. Customer Data',
-                  subtitle: 'Customer contacts, visit history & loyalty points',
-                  actions: [
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.green.shade700,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
-                      icon: const Icon(Icons.table_chart_outlined, size: 16),
-                      label: const Text('Excel (.csv)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.pop(dialogCtx);
-                        _exportCustomersExcel(businessName);
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.redAccent,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
-                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                      label: const Text('PDF Directory', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.pop(dialogCtx);
-                        _exportCustomersPdf(businessName);
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+            );
+          },
         );
       },
     );
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // Import Data Popup (3 Options: Business Reports, Orders, Customers)
+  // Import Data Popup (Unified Single Excel Importer)
   // ─────────────────────────────────────────────────────────────────
   void _showImportDialog(BuildContext context) {
     showDialog(
@@ -998,7 +1147,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-          contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1006,7 +1155,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 children: [
                   Icon(Icons.file_upload_outlined, color: Theme.of(context).colorScheme.primary, size: 24),
                   const SizedBox(width: 10),
-                  const Text('Import Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  const Text('Import App Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                 ],
               ),
               IconButton(
@@ -1020,77 +1169,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Select data category to import into your local database:',
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-
-                // Option 1: Business Reports
-                _buildPopupOptionCard(
-                  icon: Icons.analytics_outlined,
-                  iconColor: Colors.orangeAccent,
-                  title: '1. Business Reports',
-                  subtitle: 'Live-aggregated directly from your imported sales orders',
-                  actions: [
-                    TextButton.icon(
-                      onPressed: () {
-                        Navigator.pop(dialogCtx);
-                        ref.read(dashboardProvider.notifier).refresh(forceSpinner: true);
-                        SnackbarUtils.showInfo(context, 'Reports refreshed from current orders.');
-                      },
-                      icon: const Icon(Icons.refresh_rounded, size: 16),
-                      label: const Text('Refresh Reports Now', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Option 2: Order / Sales Data
-                _buildPopupOptionCard(
-                  icon: Icons.receipt_long_rounded,
-                  iconColor: Colors.blueAccent,
-                  title: '2. Order / Sales Data',
-                  subtitle: 'Import past bills and order records from a CSV file',
-                  actions: [
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withAlpha(18),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Theme.of(context).colorScheme.primary.withAlpha(90)),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.table_chart_rounded, size: 38, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Import Excel Backup (.xlsx)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        textAlign: TextAlign.center,
                       ),
-                      icon: const Icon(Icons.file_open_outlined, size: 16),
-                      label: const Text('Pick Orders CSV', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.pop(dialogCtx);
-                        _importOrdersFromCsv();
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Option 3: Customer Data
-                _buildPopupOptionCard(
-                  icon: Icons.people_alt_outlined,
-                  iconColor: Colors.teal,
-                  title: '3. Customer Data',
-                  subtitle: 'Import customer contacts, addresses & loyalty points from CSV',
-                  actions: [
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal.shade700,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Accepts complete app backups or single-sheet files. Sheet names are automatically recognized:\n• "Orders" (past bills & sales)\n• "Customers" (contacts & loyalty)\n• "Menu" (categories & items)\n• "Expenses" & "Settings"\n\nAny single sheet or combination will be cleanly ingested.',
+                        style: TextStyle(fontSize: 11.5, color: Colors.grey, height: 1.4),
                       ),
-                      icon: const Icon(Icons.file_open_outlined, size: 16),
-                      label: const Text('Pick Customer CSV', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.pop(dialogCtx);
-                        _importCustomersFromCsv();
-                      },
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.file_open_rounded, size: 18),
+                  label: const Text(
+                    'Pick Excel File (.xlsx)',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(dialogCtx);
+                    _importTotalAppData();
+                  },
                 ),
               ],
             ),
@@ -1100,80 +1219,234 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildPopupOptionCard({
+  Widget _buildDropdownSection({
+    required BuildContext context,
+    required String label,
     required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String subtitle,
-    required List<Widget> actions,
+    required Widget child,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Theme.of(context).dividerColor.withAlpha(60)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: iconColor),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 14, color: Colors.grey),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: Colors.grey)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Theme.of(context).dividerColor.withAlpha(120)),
           ),
-          const SizedBox(height: 4),
-          Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          const SizedBox(height: 10),
-          Row(children: actions),
-        ],
-      ),
+          child: DropdownButtonHideUnderline(child: child),
+        ),
+      ],
     );
+  }
+
+  String _getCategoryName(ExportCategory cat) {
+    switch (cat) {
+      case ExportCategory.orders:
+        return 'Order Data';
+      case ExportCategory.customers:
+        return 'Customer Data';
+      case ExportCategory.reports:
+        return 'Business Report';
+      case ExportCategory.backup:
+        return 'Full Backup';
+    }
+  }
+
+  (DateTime?, DateTime?, String) _resolveRangeBounds(
+    ExportDateRange range, {
+    DateTime? customFrom,
+    DateTime? customTo,
+  }) {
+    final now = DateTime.now();
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+    switch (range) {
+      case ExportDateRange.allTime:
+        return (null, null, 'All Time');
+      case ExportDateRange.today:
+        return (DateTime(now.year, now.month, now.day), todayEnd, 'Today');
+      case ExportDateRange.thisMonth:
+        return (DateTime(now.year, now.month, 1), todayEnd, 'This Month');
+      case ExportDateRange.last1Month:
+        return (now.subtract(const Duration(days: 30)), todayEnd, 'Last 1 Month');
+      case ExportDateRange.last2Months:
+        return (now.subtract(const Duration(days: 60)), todayEnd, 'Last 2 Months');
+      case ExportDateRange.last3Months:
+        return (now.subtract(const Duration(days: 90)), todayEnd, 'Last 3 Months');
+      case ExportDateRange.last6Months:
+        return (now.subtract(const Duration(days: 180)), todayEnd, 'Last 6 Months');
+      case ExportDateRange.custom:
+        final f = customFrom ?? now.subtract(const Duration(days: 6));
+        final t = customTo ?? now;
+        final orderedStart = f.isAfter(t) ? t : f;
+        final orderedEnd = f.isAfter(t) ? f : t;
+        final s = DateTime(orderedStart.year, orderedStart.month, orderedStart.day, 0, 0, 0);
+        final e = DateTime(orderedEnd.year, orderedEnd.month, orderedEnd.day, 23, 59, 59, 999);
+        final label = '${DateFormat('dd MMM yyyy').format(s)} - ${DateFormat('dd MMM yyyy').format(e)}';
+        return (s, e, label);
+    }
+  }
+
+  Future<void> _handleExportExecution({
+    required String businessName,
+    required ExportCategory category,
+    required ExportDateRange range,
+    required ExportFormat format,
+    DateTime? customFromDate,
+    DateTime? customToDate,
+  }) async {
+    final (startDate, endDate, rangeLabel) = _resolveRangeBounds(
+      range,
+      customFrom: customFromDate,
+      customTo: customToDate,
+    );
+
+    switch (category) {
+      case ExportCategory.orders:
+        await _exportOrders(businessName, format, startDate, endDate, rangeLabel);
+        break;
+      case ExportCategory.customers:
+        await _exportCustomers(businessName, format, rangeLabel);
+        break;
+      case ExportCategory.reports:
+        await _exportReports(businessName, format, startDate, endDate, rangeLabel);
+        break;
+      case ExportCategory.backup:
+        await _exportTotalBackup(businessName, startDate, endDate, rangeLabel);
+        break;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────
   // Export & Import Handlers
   // ─────────────────────────────────────────────────────────────────
-  Future<void> _exportSummaryExcel(String businessName) async {
+  Future<void> _exportReports(
+    String businessName,
+    ExportFormat format,
+    DateTime? startDate,
+    DateTime? endDate,
+    String dateRangeLabel,
+  ) async {
     setState(() => _isExporting = true);
     try {
-      final metrics = ref.read(dashboardProvider);
-      await ReportExportHelper.exportReportToExcel(metrics, businessName);
+      final baseMetrics = ref.read(dashboardProvider);
+      final settings = ref.read(settingsProvider).settings;
+      if (startDate == null && endDate == null) {
+        await ReportExportHelper.exportReport(
+          metrics: baseMetrics,
+          businessName: businessName,
+          format: format,
+          settings: settings,
+          dateRangeLabel: dateRangeLabel,
+        );
+      } else {
+        final periodData = await LocalDatabase.instance.computePeriodReports(
+          timeframe: 'Custom',
+          referenceDate: DateTime.now(),
+          customStartDate: startDate,
+          customEndDate: endDate,
+        );
+        final rev = (periodData['revenue'] as num?)?.toDouble() ?? 0.0;
+        final exp = (periodData['expenses'] as num?)?.toDouble() ?? 0.0;
+        final ord = (periodData['orderCount'] as num?)?.toInt() ?? 0;
+        final prof = (periodData['profit'] as num?)?.toDouble() ?? (rev - exp);
+        final dishes = (periodData['dishBreakdown'] as List<dynamic>?)
+                ?.map((e) => Map<String, dynamic>.from(e as Map))
+                .toList() ??
+            baseMetrics.todayDishBreakdown;
+        final rawPayments = periodData['paymentAnalytics'] as Map?;
+        final payments = <String, double>{
+          'cash': (rawPayments?['cash'] as num?)?.toDouble() ?? 0.0,
+          'upi': (rawPayments?['upi'] as num?)?.toDouble() ?? 0.0,
+          'card': (rawPayments?['card'] as num?)?.toDouble() ?? 0.0,
+          'wallet': (rawPayments?['wallet'] as num?)?.toDouble() ?? 0.0,
+        };
+        final expenseBreakdown = (periodData['expenseBreakdown'] as List<dynamic>?)
+                ?.map((e) => Map<String, dynamic>.from(e as Map))
+                .toList() ??
+            baseMetrics.expenseBreakdown;
+        final customerAnalytics = periodData['customerAnalytics'] is Map
+            ? Map<String, dynamic>.from(periodData['customerAnalytics'] as Map)
+            : baseMetrics.customerAnalytics;
+        final chartPoints = (periodData['chartDataPoints'] as List<dynamic>?)
+                ?.map((e) => (e as num).toDouble())
+                .toList() ??
+            [];
+        final chartLabels = (periodData['chartLabels'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList();
+
+        final sliced = baseMetrics.copyWith(
+          todayRevenue: rev,
+          todayOrderCount: ord,
+          todayExpenseTotal: exp,
+          netProfitToday: prof,
+          todayDishBreakdown: dishes,
+          topSellingItems: dishes,
+          paymentAnalytics: payments,
+          expenseBreakdown: expenseBreakdown,
+          customerAnalytics: customerAnalytics,
+          averageBillValue:
+              (periodData['averageBillValue'] as num?)?.toDouble() ??
+                  baseMetrics.averageBillValue,
+          peakSellingHour:
+              (periodData['peakSellingHour'] as String?) ??
+                  baseMetrics.peakSellingHour,
+          hourlyRevenueToday: chartPoints,
+        );
+
+        await ReportExportHelper.exportReport(
+          metrics: sliced,
+          businessName: businessName,
+          format: format,
+          settings: settings,
+          dateRangeLabel: dateRangeLabel,
+          isPeriodSlice: true,
+          chartLabels: chartLabels,
+        );
+      }
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, 'Failed to export summary Excel: $e');
+      if (mounted) SnackbarUtils.showError(context, 'Failed to export report: $e');
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
   }
 
-  Future<void> _exportSummaryPdf(String businessName) async {
+  Future<void> _exportOrders(
+    String businessName,
+    ExportFormat format,
+    DateTime? startDate,
+    DateTime? endDate,
+    String dateRangeLabel,
+  ) async {
     setState(() => _isExporting = true);
     try {
-      final metrics = ref.read(dashboardProvider);
-      await ReportExportHelper.exportReportToPdf(metrics, businessName);
-    } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, 'Failed to export summary PDF: $e');
-    } finally {
-      if (mounted) setState(() => _isExporting = false);
-    }
-  }
-
-  Future<void> _exportOrdersExcel(String businessName) async {
-    setState(() => _isExporting = true);
-    try {
-      final orders = await LocalDatabase.instance.getOrders(limit: 5000);
+      final orders = await LocalDatabase.instance.getOrders(
+        startDate: startDate,
+        endDate: endDate,
+        limit: 50000,
+      );
       if (orders.isEmpty) {
-        if (mounted) SnackbarUtils.showInfo(context, 'No orders found to export.');
+        if (mounted) SnackbarUtils.showInfo(context, 'No orders found for the selected timeframe ($dateRangeLabel).');
         return;
       }
-      await ReportExportHelper.exportOrdersToExcel(orders, businessName);
+      final settings = ref.read(settingsProvider).settings;
+      await ReportExportHelper.exportOrders(
+        orders: orders,
+        businessName: businessName,
+        format: format,
+        settings: settings,
+        dateRangeLabel: dateRangeLabel,
+      );
     } catch (e) {
       if (mounted) SnackbarUtils.showError(context, 'Failed to export orders: $e');
     } finally {
@@ -1181,23 +1454,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _exportOrdersPdf(String businessName) async {
-    setState(() => _isExporting = true);
-    try {
-      final orders = await LocalDatabase.instance.getOrders(limit: 5000);
-      if (orders.isEmpty) {
-        if (mounted) SnackbarUtils.showInfo(context, 'No orders found to export.');
-        return;
-      }
-      await ReportExportHelper.exportOrdersToPdf(orders, businessName);
-    } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, 'Failed to export orders PDF: $e');
-    } finally {
-      if (mounted) setState(() => _isExporting = false);
-    }
-  }
-
-  Future<void> _exportCustomersExcel(String businessName) async {
+  Future<void> _exportCustomers(String businessName, ExportFormat format, String dateRangeLabel) async {
     setState(() => _isExporting = true);
     try {
       final customers = await LocalDatabase.instance.getCustomers();
@@ -1205,90 +1462,130 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (mounted) SnackbarUtils.showInfo(context, 'No customers found to export.');
         return;
       }
-      await ReportExportHelper.exportCustomersToExcel(customers, businessName);
+      final settings = ref.read(settingsProvider).settings;
+      await ReportExportHelper.exportCustomers(
+        customers: customers,
+        businessName: businessName,
+        format: format,
+        settings: settings,
+        dateRangeLabel: dateRangeLabel,
+      );
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, 'Failed to export customers Excel: $e');
+      if (mounted) SnackbarUtils.showError(context, 'Failed to export customers: $e');
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
   }
 
-  Future<void> _exportCustomersPdf(String businessName) async {
+  Future<void> _exportTotalBackup(
+    String businessName,
+    DateTime? startDate,
+    DateTime? endDate,
+    String dateRangeLabel,
+  ) async {
     setState(() => _isExporting = true);
     try {
-      final customers = await LocalDatabase.instance.getCustomers();
-      if (customers.isEmpty) {
-        if (mounted) SnackbarUtils.showInfo(context, 'No customers found to export.');
-        return;
-      }
-      await ReportExportHelper.exportCustomersToPdf(customers, businessName);
+      final settings = ref.read(settingsProvider).settings;
+      await ReportExportHelper.exportCompleteAppBackup(
+        db: LocalDatabase.instance,
+        businessName: businessName,
+        settings: settings,
+        startDate: startDate,
+        endDate: endDate,
+        dateRangeLabel: dateRangeLabel,
+      );
     } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, 'Failed to export customers PDF: $e');
+      if (mounted) SnackbarUtils.showError(context, 'Failed to export complete backup: $e');
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
   }
 
-  Future<void> _importOrdersFromCsv() async {
+  Future<void> _importTotalAppData() async {
     setState(() => _isImporting = true);
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['csv', 'txt'],
+        allowedExtensions: ['xlsx', 'xls', 'csv', 'txt'],
+        withData: true,
       );
-      if (result == null || result.files.isEmpty || result.files.first.path == null) {
+      if (result == null || result.files.isEmpty) {
         return;
       }
-      final path = result.files.first.path!;
-      final file = File(path);
-      final content = await file.readAsString();
-
-      final count = await ReportExportHelper.importOrdersFromCsv(content);
-      if (count > 0) {
-        ref.read(ordersProvider.notifier).loadOrders(forceSpinner: true);
-        ref.read(dashboardProvider.notifier).refresh(forceSpinner: true);
-        if (mounted) {
-          SnackbarUtils.showSuccess(context, 'Successfully imported $count order(s) into local database!');
-        }
-      } else {
-        if (mounted) {
-          SnackbarUtils.showWarning(context, 'No valid order rows found in the selected CSV file.');
-        }
+      final picked = result.files.first;
+      String? path = picked.path;
+      if ((path == null || path.isEmpty) && picked.bytes != null) {
+        final tempDir = await getTemporaryDirectory();
+        final ext = picked.extension ?? 'xlsx';
+        final tempFile = File('${tempDir.path}/imported_backup.$ext');
+        await tempFile.writeAsBytes(picked.bytes!);
+        path = tempFile.path;
       }
-    } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, 'Failed to import orders: $e');
-    } finally {
-      if (mounted) setState(() => _isImporting = false);
-    }
-  }
-
-  Future<void> _importCustomersFromCsv() async {
-    setState(() => _isImporting = true);
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv', 'txt'],
-      );
-      if (result == null || result.files.isEmpty || result.files.first.path == null) {
+      if (path == null || path.isEmpty) {
+        if (mounted) SnackbarUtils.showError(context, 'Unable to access the chosen file');
         return;
       }
-      final path = result.files.first.path!;
-      final file = File(path);
-      final content = await file.readAsString();
+      final stats = await ReportExportHelper.importTotalAppData(path);
 
-      final count = await ReportExportHelper.importCustomersFromCsv(content);
-      if (count > 0) {
-        await ref.read(customerProvider.notifier).loadCustomers();
-        if (mounted) {
-          SnackbarUtils.showSuccess(context, 'Successfully imported $count customer(s) into local database!');
-        }
-      } else {
-        if (mounted) {
-          SnackbarUtils.showWarning(context, 'No valid customer rows found in the selected CSV file.');
+      final ordersCount = stats['orders'] as int? ?? 0;
+      final customersCount = stats['customers'] as int? ?? 0;
+      final menuCount = stats['menu'] as int? ?? stats['menuItems'] as int? ?? 0;
+      final expenseCount = stats['expenses'] as int? ?? 0;
+      final settingsImported = stats['settings'] as bool? ?? stats['settingsUpdated'] as bool? ?? false;
+
+      // Reload all providers with fresh data safely
+      try {
+        await ref.read(ordersProvider.notifier).loadOrders(forceSpinner: true);
+      } catch (e) {
+        debugPrint('Error refreshing orders: $e');
+      }
+      try {
+        await ref.read(dashboardProvider.notifier).refresh(forceSpinner: true);
+      } catch (e) {
+        debugPrint('Error refreshing dashboard: $e');
+      }
+      try {
+        await ref.read(customerProvider.notifier).loadCustomers(forceSpinner: true);
+      } catch (e) {
+        debugPrint('Error refreshing customers: $e');
+      }
+      try {
+        await ref.read(menuProvider.notifier).loadCategoriesAndItems(forceSpinner: true);
+      } catch (e) {
+        debugPrint('Error refreshing menu: $e');
+      }
+      try {
+        await ref.read(expenseProvider.notifier).loadAll(forceSpinner: true);
+      } catch (e) {
+        debugPrint('Error refreshing expenses: $e');
+      }
+      try {
+        await ref.read(settingsProvider.notifier).loadSettings();
+      } catch (e) {
+        debugPrint('Error refreshing settings: $e');
+      }
+      try {
+        await ref.read(syncProvider.notifier).refreshStatus();
+        ref.read(syncProvider.notifier).autoSyncIfOnline();
+      } catch (_) {}
+
+      final parts = <String>[];
+      if (ordersCount > 0) parts.add('$ordersCount Orders');
+      if (customersCount > 0) parts.add('$customersCount Customers');
+      if (menuCount > 0) parts.add('$menuCount Menu items');
+      if (expenseCount > 0) parts.add('$expenseCount Expenses');
+      if (settingsImported) parts.add('Settings restored');
+
+      if (mounted) {
+        if (parts.isNotEmpty) {
+          SnackbarUtils.showSuccess(context, 'Import Successful!\nIngested: ${parts.join(', ')}');
+        } else {
+          SnackbarUtils.showWarning(context, 'No valid records found in the selected file.');
         }
       }
-    } catch (e) {
-      if (mounted) SnackbarUtils.showError(context, 'Failed to import customers: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Failed to import app data: $e\n$stackTrace');
+      if (mounted) SnackbarUtils.showError(context, 'Failed to import app data: $e');
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
@@ -1324,8 +1621,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: const Text('Interactive feature walkthrough'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
+              ref.read(onboardingTourTriggerProvider.notifier).state++;
               Navigator.pop(context);
-              OnboardingDialog.forceShow(context);
             },
           ),
         ],
@@ -1484,4 +1781,141 @@ class _ThemeOption {
     required this.colors,
     required this.accentColor,
   });
+}
+
+/// Animated running-line progress bar shown while cloud sync upload is running.
+class _RunningSyncProgressBar extends StatefulWidget {
+  final double? progress;
+  final int pushedCount;
+  final int totalCount;
+
+  const _RunningSyncProgressBar({
+    required this.progress,
+    required this.pushedCount,
+    required this.totalCount,
+  });
+
+  @override
+  State<_RunningSyncProgressBar> createState() => _RunningSyncProgressBarState();
+}
+
+class _RunningSyncProgressBarState extends State<_RunningSyncProgressBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final trackColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white.withAlpha(24)
+        : Colors.black.withAlpha(18);
+    final pct = widget.progress != null ? (widget.progress! * 100).round() : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.totalCount > 0) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${CurrencyFormatter.formatInteger(widget.pushedCount)} / ${CurrencyFormatter.formatInteger(widget.totalCount)} synced',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: primary,
+                ),
+              ),
+              if (pct != null)
+                Text(
+                  '$pct%',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
+                    color: primary,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+        ],
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            height: 7,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final totalWidth = constraints.maxWidth;
+                final runnerWidth = (totalWidth * 0.34).clamp(48.0, 140.0);
+                final fillWidth = widget.progress != null
+                    ? (totalWidth * widget.progress!).clamp(0.0, totalWidth)
+                    : 0.0;
+
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(color: trackColor),
+                    if (fillWidth > 0)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 220),
+                          width: fillWidth,
+                          height: 7,
+                          color: primary.withAlpha(130),
+                        ),
+                      ),
+                    AnimatedBuilder(
+                      animation: _controller,
+                      builder: (context, _) {
+                        final dx = -runnerWidth +
+                            (_controller.value * (totalWidth + runnerWidth));
+                        return Transform.translate(
+                          offset: Offset(dx, 0),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              width: runnerWidth,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(6),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    primary.withAlpha(0),
+                                    primary,
+                                    Colors.white.withAlpha(220),
+                                    primary,
+                                    primary.withAlpha(0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

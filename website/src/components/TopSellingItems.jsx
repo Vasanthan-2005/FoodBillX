@@ -1,40 +1,52 @@
 import React from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
-import { Award, Flame } from 'lucide-react';
+import { Flame } from 'lucide-react';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 
 export const TopSellingItems = ({ topSellingItems = [] }) => {
   return (
-    <div className="glass-card p-6 rounded-3xl mb-8">
+    <div className="cyber-card cyber-card-hover p-6 rounded-3xl mb-8">
       <div className="flex items-center justify-between gap-2 mb-6">
         <div>
           <div className="flex items-center gap-2">
-            <Flame className="w-5 h-5 text-amber-500" />
-            <h2 className="text-lg font-bold text-white tracking-tight">Top 10 Selling Dishes</h2>
+            <Flame className="w-5 h-5 text-[#FF6D00]" />
+            <h2 className="font-display text-lg font-bold text-white tracking-tight">
+              Top Selling Dishes Leaderboard
+            </h2>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">Most popular food items by quantity sold</p>
+          <p className="text-xs text-slate-400 mt-0.5">Ranked by portions billed & item revenue</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        {/* Horizontal Bar Chart */}
         <div className="h-72 w-full">
           {topSellingItems.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-              No top items recorded for selected period
+              No dish sales recorded for selected period
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={topSellingItems} margin={{ top: 0, right: 20, left: 40, bottom: 0 }}>
+              <BarChart
+                layout="vertical"
+                data={topSellingItems.slice(0, 10)}
+                margin={{ top: 0, right: 20, left: 32, bottom: 0 }}
+              >
                 <XAxis type="number" stroke="#64748B" fontSize={11} axisLine={false} tickLine={false} />
-                <YAxis dataKey="name" type="category" stroke="#94A3B8" fontSize={11} width={100} axisLine={false} tickLine={false} />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  stroke="#CBD5E1"
+                  fontSize={11}
+                  width={110}
+                  axisLine={false}
+                  tickLine={false}
+                />
                 <Tooltip
-                  formatter={(val) => [`${formatNumber(val)} portions`, 'Quantity Sold']}
-                  contentStyle={{ backgroundColor: '#0F172A', borderRadius: '12px', borderColor: 'rgba(255,255,255,0.1)' }}
+                  formatter={(val) => [`${formatNumber(val)} portions`, 'Sold']}
                 />
                 <Bar dataKey="qtySold" radius={[0, 8, 8, 0]}>
-                  {topSellingItems.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={index < 3 ? '#FF5722' : '#F59E0B'} />
+                  {topSellingItems.slice(0, 10).map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={index < 3 ? '#FF6D00' : '#FFB300'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -42,28 +54,36 @@ export const TopSellingItems = ({ topSellingItems = [] }) => {
           )}
         </div>
 
-        {/* Detailed Items Performance List */}
         <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-          {topSellingItems.slice(0, 6).map((item, idx) => (
-            <div key={item.name} className="glass-panel p-3 rounded-2xl flex items-center justify-between border border-slate-800/80">
-              <div className="flex items-center gap-3">
-                <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black ${
-                  idx === 0 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                  idx === 1 ? 'bg-slate-300/20 text-slate-200 border border-slate-300/30' :
-                  idx === 2 ? 'bg-orange-600/20 text-orange-400 border border-orange-600/30' :
-                  'bg-slate-800 text-slate-400'
-                }`}>
+          {topSellingItems.slice(0, 8).map((item, idx) => (
+            <div
+              key={item.name}
+              className="cyber-panel p-3 rounded-2xl flex items-center justify-between border border-white/10"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${
+                    idx === 0
+                      ? 'bg-[#FF6D00]/25 text-[#FF8F00] border border-[#FF6D00]/40'
+                      : idx === 1
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/35'
+                      : idx === 2
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/35'
+                      : 'bg-white/5 text-slate-400'
+                  }`}
+                >
                   #{idx + 1}
                 </span>
-                <div>
-                  <h4 className="text-xs font-bold text-white leading-tight">{item.name}</h4>
-                  <span className="text-[10px] text-slate-400">{item.category} • {formatNumber(item.qtySold)} orders</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
+                  <span className="text-[10px] text-slate-400">
+                    {formatNumber(item.qtySold)} portions sold
+                  </span>
                 </div>
               </div>
-              <div className="text-right">
-                <span className="text-xs font-black text-white block">{formatCurrency(item.revenue)}</span>
-                <span className="text-[10px] text-emerald-400 font-semibold">+Est {formatCurrency(item.profit)}</span>
-              </div>
+              <span className="text-xs font-black text-emerald-400 ml-3 shrink-0">
+                {formatCurrency(item.revenue)}
+              </span>
             </div>
           ))}
         </div>

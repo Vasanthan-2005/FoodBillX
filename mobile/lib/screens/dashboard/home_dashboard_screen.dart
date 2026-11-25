@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
-import '../../core/widgets/live_badge_widget.dart';
 import '../../core/widgets/metric_card_widget.dart';
 import '../../core/widgets/revenue_line_chart_widget.dart';
 import '../../core/widgets/skeleton_loader.dart';
@@ -70,21 +69,21 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
-                const Icon(
-                  Icons.restaurant_rounded,
+                Icon(
+                  Icons.dashboard_rounded,
                   color: AppColors.primary,
                   size: 22,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    settings?.businessName ?? 'FoodBillX',
+                    'Dashboard',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 18,
+                    style: TextStyle(
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -93,7 +92,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             ),
             const SizedBox(height: 2),
             Text(
-              formattedDate,
+              '${settings?.businessName ?? 'FoodBillX'} • $formattedDate',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11,
                 color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
@@ -102,12 +103,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           ],
         ),
         actions: [
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.only(right: 4.0),
-              child: LiveBadgeWidget(),
-            ),
-          ),
           IconButton(
             icon: const Icon(Icons.receipt_long_rounded),
             tooltip: 'Previous Orders',
@@ -177,17 +172,19 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     icon: Icons.account_balance_wallet_rounded,
                     color: AppColors.secondary,
                     subtitle: metrics.todayOrderCount > 0
-                        ? '${metrics.todayOrderCount} orders billed'
+                        ? '${CurrencyFormatter.formatInteger(metrics.todayOrderCount)} orders billed'
                         : 'No orders yet',
+                    onTap: widget.onOpenOrders,
                   ),
                   MetricCardWidget(
                     title: 'Today\'s Orders',
-                    value: '${metrics.todayOrderCount}',
+                    value: CurrencyFormatter.formatInteger(metrics.todayOrderCount),
                     icon: Icons.receipt_long_rounded,
                     color: Colors.blue.shade600,
                     subtitle: metrics.todayOrderCount > 0
                         ? 'Avg. ${CurrencyFormatter.format(metrics.todayRevenue / metrics.todayOrderCount)}'
                         : '0 billed today',
+                    onTap: widget.onOpenOrders,
                   ),
                   MetricCardWidget(
                     title: 'Today\'s Expenses',
@@ -195,8 +192,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     icon: Icons.shopping_bag_outlined,
                     color: Colors.red.shade400,
                     subtitle: metrics.todayExpenseTotal > 0
-                        ? 'Operational costs'
-                        : '₹0 recorded',
+                        ? 'Tap to manage'
+                        : 'Tap to add expense',
+                    onTap: widget.onOpenExpenses,
                   ),
                   MetricCardWidget(
                     title: 'Today\'s Net Profit',
@@ -212,9 +210,12 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     subtitle: metrics.todayExpenseTotal > 0
                         ? 'Revenue - Expenses'
                         : 'to know profit',
+                    onTap: metrics.todayExpenseTotal <= 0
+                        ? widget.onOpenExpenses
+                        : () => widget.onNavigateToTab(widget.reportsTabIndex),
                   ),
                 ],
-              ).animate().fade(duration: 300.ms),
+              ),
 
               const SizedBox(height: 20),
 
@@ -269,72 +270,83 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               const SizedBox(height: 20),
 
               // 4. View Full Reports Call-To-Action Banner
-              InkWell(
-                onTap: () => widget.onNavigateToTab(widget.reportsTabIndex),
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              Builder(
+                builder: (context) {
+                  final theme = Theme.of(context);
+                  final isAmoled = theme.scaffoldBackgroundColor == AppColors.amoledBackground;
+                  return InkWell(
+                    onTap: () => widget.onNavigateToTab(widget.reportsTabIndex),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: AppColors.primary.withAlpha(60),
-                      width: 1.2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: theme.cardTheme.color ??
+                            (isDark ? AppColors.darkSurface : AppColors.lightSurface),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isAmoled
+                              ? AppColors.amoledBorder
+                              : AppColors.primary.withAlpha(60),
+                          width: 1.2,
+                        ),
+                        boxShadow: isAmoled
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color: AppColors.primary.withAlpha(15),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withAlpha(30),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.insights_rounded,
+                              color: AppColors.primary,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Detailed Business Reports',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'P&L periods, dish rankings, customer loyalty & PDF/Excel export',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: theme.textTheme.bodyMedium?.color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            color: AppColors.primary,
+                            size: 16,
+                          ),
+                        ],
+                      ),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withAlpha(15),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withAlpha(30),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.insights_rounded,
-                          color: AppColors.primary,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Detailed Business Reports',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'P&L periods, dish rankings, customer loyalty & PDF export',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Icon(
-                        Icons.arrow_forward_ios_rounded,
-                        color: AppColors.primary,
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                ),
+                  );
+                },
               ),
             ],
           ),
@@ -412,8 +424,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     }
 
     return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: AppTheme.isAmoledTheme(context) ? 0 : 1,
+      shape: AppTheme.cardShape(context, radius: 16),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

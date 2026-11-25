@@ -89,4 +89,14 @@ class AppColors {
   static const Color emeraldBorder = Color(0xFF2E4A3B);        // Green border
   static const Color emeraldTextPrimary = Color(0xFFE8F5E9);   // Minty off-white
   static const Color emeraldTextSecondary = Color(0xFF81C784); // Muted green grey
+
+  // ──────────────────────────────────────────────
+  // Ultra Dark (AMOLED) Theme Palette
+  // ──────────────────────────────────────────────
+  static const Color amoledBackground = Color(0xFF000000);    // True Pitch Black
+  static const Color amoledSurface = Color(0xFF000000);       // True Black Surface
+  static const Color amoledCard = Color(0xFF14151D);          // Distinct Obsidian Card
+  static const Color amoledBorder = Color(0xFF2F3242);        // Crisp Hairline Border
+  static const Color amoledTextPrimary = Color(0xFFFFFFFF);   // Pure White
+  static const Color amoledTextSecondary = Color(0xFF9CA3AF); // Muted Cool Grey
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/customer_validator.dart';
 import '../../core/utils/pdf_invoice_helper.dart';
@@ -15,7 +16,6 @@ import '../../providers/customer_provider.dart';
 import '../../providers/menu_provider.dart';
 
 import '../../core/widgets/dish_card_widget.dart';
-import '../../core/widgets/live_badge_widget.dart';
 import '../../core/widgets/loyalty_input_field_widget.dart';
 
 class BillingScreen extends ConsumerStatefulWidget {
@@ -58,7 +58,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
             return Container(
               decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                color: isDark
+                    ? Theme.of(context).colorScheme.surface
+                    : AppColors.lightSurface,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(28),
                 ),
@@ -247,12 +249,12 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? AppColors.darkCard
+                            ? (Theme.of(context).cardTheme.color ?? AppColors.darkCard)
                             : AppColors.lightBackground,
                         borderRadius: BorderRadius.circular(18),
                         border: Border.all(
                           color: isDark
-                              ? AppColors.darkBorder
+                              ? Theme.of(context).dividerColor
                               : AppColors.lightBorder,
                         ),
                       ),
@@ -262,8 +264,15 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('Subtotal:'),
-                              Text(
-                                CurrencyFormatter.format(cartState.subtotal),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    CurrencyFormatter.format(cartState.subtotal),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -273,22 +282,16 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text('Discount:', style: TextStyle(color: Colors.green)),
-                                Text(
-                                  '-${CurrencyFormatter.format(cartState.totalDiscount)}',
-                                  style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (cartState.gstAmount > 0) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('GST Tax:'),
-                                Text(
-                                  CurrencyFormatter.format(cartState.gstAmount),
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      '-${CurrencyFormatter.format(cartState.totalDiscount)}',
+                                      style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -298,12 +301,22 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  'Service Charge (${cartState.serviceChargePercentage.toStringAsFixed(1)}%):',
+                                Expanded(
+                                  child: Text(
+                                    'Service Charge (${cartState.serviceChargePercentage.toStringAsFixed(1)}%):',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                                Text(
-                                  CurrencyFormatter.format(
-                                    cartState.serviceChargeAmount,
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      CurrencyFormatter.format(
+                                        cartState.serviceChargeAmount,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -320,12 +333,19 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              Text(
-                                CurrencyFormatter.format(cartState.grandTotal),
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppColors.primary,
+                              const SizedBox(width: 10),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    CurrencyFormatter.format(cartState.grandTotal),
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -778,12 +798,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       appBar: AppBar(
         title: const Text('POS Billing & Checkout'),
         actions: [
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.only(right: 8.0),
-              child: LiveBadgeWidget(),
-            ),
-          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
@@ -840,10 +854,14 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        color: AppTheme.isAmoledTheme(context)
+                            ? AppColors.amoledCard
+                            : (isDark ? const Color(0xFF1E293B) : Colors.white),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                          color: AppTheme.isAmoledTheme(context)
+                              ? AppColors.amoledBorder
+                              : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -885,11 +903,15 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                         : AppColors.lightTextSecondary,
                                   ),
                                 ),
-                                Text(
-                                  CurrencyFormatter.format(billingState.grandTotal),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16,
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    CurrencyFormatter.format(billingState.grandTotal),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1059,10 +1081,18 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     return Container(
       width: width,
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        color: AppTheme.isAmoledTheme(context)
+            ? AppColors.amoledCard
+            : (isDark
+                ? Theme.of(context).colorScheme.surface
+                : AppColors.lightSurface),
         border: Border(
           left: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            color: AppTheme.isAmoledTheme(context)
+                ? AppColors.amoledBorder
+                : (isDark
+                    ? Theme.of(context).dividerColor
+                    : AppColors.lightBorder),
           ),
         ),
       ),
@@ -1156,8 +1186,16 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isDark ? AppColors.darkCard : AppColors.lightCard,
-                border: Border(top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
+                color: isDark
+                    ? (Theme.of(context).cardTheme.color ?? AppColors.darkCard)
+                    : AppColors.lightCard,
+                border: Border(
+                  top: BorderSide(
+                    color: isDark
+                        ? Theme.of(context).dividerColor
+                        : AppColors.lightBorder,
+                  ),
+                ),
               ),
               child: Column(
                 children: [
@@ -1165,9 +1203,16 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Grand Total:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text(
-                        CurrencyFormatter.format(billingState.grandTotal),
-                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            CurrencyFormatter.format(billingState.grandTotal),
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: AppColors.primary),
+                          ),
+                        ),
                       ),
                     ],
                   ),

@@ -133,7 +133,8 @@ class _LoyaltyInputFieldWidgetState
             margin: const EdgeInsets.only(top: 8),
             constraints: const BoxConstraints(maxHeight: 220),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : Colors.white,
+              color: Theme.of(context).cardTheme.color ??
+                  (isDark ? AppColors.darkSurface : Colors.white),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: AppColors.primary.withAlpha(90),

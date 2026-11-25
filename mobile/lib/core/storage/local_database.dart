@@ -1,6 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/business_settings_model.dart';
@@ -26,14 +30,44 @@ class LocalDatabase {
   }
 
   Future<Database> _initDatabase() async {
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'foodbillx_local.db');
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        await _ensureIndexes(db);
+      },
+      onOpen: (db) async {
+        await _ensureIndexes(db);
+      },
     );
+  }
+
+  Future<void> _ensureIndexes(DatabaseExecutor db) async {
+    const statements = [
+      'CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);',
+      'CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);',
+      'CREATE INDEX IF NOT EXISTS idx_expenses_sync ON expenses(sync_status);',
+      'CREATE INDEX IF NOT EXISTS idx_expenses_deleted ON expenses(deleted_at);',
+      'CREATE INDEX IF NOT EXISTS idx_expenses_deleted_date ON expenses(deleted_at, date);',
+      'CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);',
+      'CREATE INDEX IF NOT EXISTS idx_customers_card ON customers(loyalty_card_number);',
+      'CREATE INDEX IF NOT EXISTS idx_customers_deleted_visits ON customers(deleted_at, total_visits DESC, name ASC);',
+      'CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);',
+      'CREATE INDEX IF NOT EXISTS idx_orders_status_deleted_created ON orders(deleted_at, order_status, created_at);',
+      'CREATE INDEX IF NOT EXISTS idx_orders_payment ON orders(payment_method, created_at);',
+      'CREATE INDEX IF NOT EXISTS idx_menu_items_cat_deleted ON menu_items(category_id, deleted_at, sort_order);',
+    ];
+    for (final stmt in statements) {
+      await db.execute(stmt);
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -311,7 +345,7 @@ class LocalDatabase {
       'server_id': null,
       'category': data['category'] ?? 'Miscellaneous',
       'title': data['title'] ?? data['category'] ?? '',
-      'amount': (data['amount'] as num).toDouble(),
+      'amount': (data['amount'] as num?)?.toDouble() ?? 0.0,
       'date': date is DateTime ? date.toIso8601String() : date.toString(),
       'notes': data['notes'] ?? '',
       'created_at': now,
@@ -339,7 +373,7 @@ class LocalDatabase {
     };
     if (data.containsKey('title')) updateFields['title'] = data['title'];
     if (data.containsKey('category')) updateFields['category'] = data['category'];
-    if (data.containsKey('amount')) updateFields['amount'] = (data['amount'] as num).toDouble();
+    if (data.containsKey('amount')) updateFields['amount'] = (data['amount'] as num?)?.toDouble() ?? 0.0;
     if (data.containsKey('date')) {
       final d = data['date'];
       updateFields['date'] = d is DateTime ? d.toIso8601String() : d.toString();
@@ -582,27 +616,47 @@ class LocalDatabase {
     if (data.containsKey('gstin')) row['gstin'] = data['gstin'];
     if (data.containsKey('currency')) row['currency'] = data['currency'];
     if (data.containsKey('invoicePrefix')) row['invoice_prefix'] = data['invoicePrefix'];
-    if (data.containsKey('taxPercentage')) row['tax_percentage'] = (data['taxPercentage'] as num).toDouble();
+    if (data.containsKey('taxPercentage')) {
+      row['tax_percentage'] = (data['taxPercentage'] as num?)?.toDouble() ?? 0.0;
+    }
     if (data.containsKey('serviceChargePercentage')) {
-      row['service_charge_percentage'] = (data['serviceChargePercentage'] as num).toDouble();
+      row['service_charge_percentage'] = (data['serviceChargePercentage'] as num?)?.toDouble() ?? 0.0;
     }
     if (data.containsKey('invoiceFooter')) row['invoice_footer'] = data['invoiceFooter'];
     if (data.containsKey('loyaltyTargetVisits')) {
-      row['loyalty_target_visits'] = (data['loyaltyTargetVisits'] as num).toInt();
+      row['loyalty_target_visits'] = (data['loyaltyTargetVisits'] as num?)?.toInt() ?? 6;
     }
     if (data.containsKey('loyaltyRewardType')) row['loyalty_reward_type'] = data['loyaltyRewardType'];
     if (data.containsKey('loyaltyRewardDescription')) {
       row['loyalty_reward_description'] = data['loyaltyRewardDescription'];
     }
     if (data.containsKey('monthlyExpenseBudget')) {
-      row['monthly_expense_budget'] = (data['monthlyExpenseBudget'] as num).toDouble();
+      row['monthly_expense_budget'] = (data['monthlyExpenseBudget'] as num?)?.toDouble() ?? 0.0;
     }
 
     final count = await db.update('business_settings', row, where: 'id = ?', whereArgs: ['singleton']);
     if (count == 0) {
-      await db.insert('business_settings', row);
+      await db.insert('business_settings', row, conflictAlgorithm: ConflictAlgorithm.replace);
     }
-    return (await getSettings())!;
+    final updated = await getSettings();
+    if (updated != null) return updated;
+
+    return BusinessSettingsModel(
+      id: 'singleton',
+      businessName: data['businessName'] as String? ?? 'HMB Bills',
+      logo: data['logo'] as String? ?? '',
+      phone: data['phone'] as String? ?? '',
+      address: data['address'] as String? ?? '',
+      gstin: data['gstin'] as String? ?? '',
+      currency: data['currency'] as String? ?? '₹',
+      invoicePrefix: data['invoicePrefix'] as String? ?? 'B',
+      taxPercentage: (data['taxPercentage'] as num?)?.toDouble() ?? 0.0,
+      serviceChargePercentage: (data['serviceChargePercentage'] as num?)?.toDouble() ?? 0.0,
+      invoiceFooter: data['invoiceFooter'] as String? ?? 'Thank you for dining with us!',
+      loyaltyTargetVisits: (data['loyaltyTargetVisits'] as num?)?.toInt() ?? 6,
+      loyaltyRewardType: data['loyaltyRewardType'] as String? ?? 'Free Drink',
+      loyaltyRewardDescription: data['loyaltyRewardDescription'] as String? ?? 'Free Drink',
+    );
   }
 
   // ==========================================
@@ -680,9 +734,9 @@ class LocalDatabase {
     if (data.containsKey('address')) updates['address'] = data['address'];
     if (data.containsKey('notes')) updates['notes'] = data['notes'];
     if (data.containsKey('loyaltyCardNumber')) updates['loyalty_card_number'] = data['loyaltyCardNumber'];
-    if (data.containsKey('totalVisits')) updates['total_visits'] = data['totalVisits'];
-    if (data.containsKey('totalSpent')) updates['total_spent'] = (data['totalSpent'] as num).toDouble();
-    if (data.containsKey('loyaltyPoints')) updates['loyalty_points'] = data['loyaltyPoints'];
+    if (data.containsKey('totalVisits')) updates['total_visits'] = (data['totalVisits'] as num?)?.toInt() ?? 0;
+    if (data.containsKey('totalSpent')) updates['total_spent'] = (data['totalSpent'] as num?)?.toDouble() ?? 0.0;
+    if (data.containsKey('loyaltyPoints')) updates['loyalty_points'] = (data['loyaltyPoints'] as num?)?.toInt() ?? 0;
 
     await db.update('customers', updates, where: 'id = ?', whereArgs: [id]);
     final updated = await db.query('customers', where: 'id = ?', whereArgs: [id]);
@@ -1057,10 +1111,11 @@ class LocalDatabase {
     required double grandTotal,
     required String paymentMethod,
     String notes = '',
+    DateTime? createdAt,
   }) async {
     final db = await database;
     final id = _uuid.v4();
-    final now = DateTime.now().toIso8601String();
+    final now = (createdAt ?? DateTime.now()).toIso8601String();
 
     final finalOrderNumber = orderNumber != null && orderNumber.isNotEmpty
         ? orderNumber
@@ -1094,7 +1149,7 @@ class LocalDatabase {
       'deleted_at': null,
     };
 
-    await db.insert('orders', row);
+    await db.insert('orders', row, conflictAlgorithm: ConflictAlgorithm.replace);
 
     // If customer phone is present, update customer stats offline atomically!
     if (customerPhone.isNotEmpty) {
@@ -1133,6 +1188,166 @@ class LocalDatabase {
     );
     final updated = await db.query('orders', where: 'id = ?', whereArgs: [id]);
     return _mapToOrder(updated.first);
+  }
+
+  /// Deletes an order from the database and decrements matching customer totals
+  /// in the same transaction so all sales, profits, dishes, and customer metrics update accurately.
+  Future<bool> deleteOrderAndRecalculate(String id) async {
+    final db = await database;
+    return await db.transaction((txn) async {
+      final rows = await txn.query(
+        'orders',
+        columns: ['id', 'server_id', 'sync_status', 'order_status', 'customer_phone', 'grand_total'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return false;
+
+      final orderRow = rows.first;
+      final serverId = orderRow['server_id'] as String?;
+      final syncStatus = orderRow['sync_status'] as String?;
+      final status = (orderRow['order_status'] as String? ?? 'completed').toLowerCase();
+      final phone = (orderRow['customer_phone'] as String? ?? '').trim();
+      final total = (orderRow['grand_total'] as num?)?.toDouble() ?? 0.0;
+
+      if (status != 'refunded' && phone.isNotEmpty) {
+        final custRows = await txn.query(
+          'customers',
+          columns: ['id', 'total_visits', 'total_spent', 'sync_status'],
+          where: 'phone = ? AND deleted_at IS NULL',
+          whereArgs: [phone],
+          limit: 1,
+        );
+        if (custRows.isNotEmpty) {
+          final cust = custRows.first;
+          final currentVisits = (cust['total_visits'] as num?)?.toInt() ?? 0;
+          final currentSpent = (cust['total_spent'] as num?)?.toDouble() ?? 0.0;
+          final newVisits = currentVisits > 0 ? currentVisits - 1 : 0;
+          final newSpent = (currentSpent - total) > 0 ? (currentSpent - total) : 0.0;
+          final currentSync = cust['sync_status'] as String? ?? 'synced';
+          final newSync = currentSync == 'pendingCreate' ? 'pendingCreate' : 'pendingUpdate';
+
+          await txn.update(
+            'customers',
+            {
+              'total_visits': newVisits,
+              'total_spent': newSpent,
+              'updated_at': DateTime.now().toIso8601String(),
+              'sync_status': newSync,
+            },
+            where: 'id = ?',
+            whereArgs: [cust['id']],
+          );
+        }
+      }
+
+      if (serverId == null || serverId.isEmpty || syncStatus == 'pendingCreate') {
+        final deletedCount = await txn.delete('orders', where: 'id = ?', whereArgs: [id]);
+        return deletedCount > 0;
+      }
+
+      final now = DateTime.now().toIso8601String();
+      final updatedCount = await txn.update(
+        'orders',
+        {
+          'deleted_at': now,
+          'sync_status': 'pendingDelete',
+          'updated_at': now,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      return updatedCount > 0;
+    });
+  }
+
+  /// Updates an existing order's customer metadata, payment method, items, totals,
+  /// and adjusts any matched customer's total_spent delta inside a single transaction.
+  Future<OrderModel?> updateOrderDetails({
+    required String id,
+    required String customerName,
+    required String customerPhone,
+    required String paymentMethod,
+    required List<OrderItemModel> items,
+    required double subtotal,
+    required double discountAmount,
+    required double serviceChargeAmount,
+    required double grandTotal,
+    String notes = '',
+  }) async {
+    final db = await database;
+    return await db.transaction((txn) async {
+      final existingRows = await txn.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (existingRows.isEmpty) return null;
+
+      final prev = existingRows.first;
+      final prevTotal = (prev['grand_total'] as num?)?.toDouble() ?? 0.0;
+      final prevPhone = (prev['customer_phone'] as String? ?? '').trim();
+      final prevStatus = (prev['order_status'] as String? ?? 'completed').toLowerCase();
+      final currentSync = prev['sync_status'] as String? ?? 'synced';
+      final newSync = currentSync == 'pendingCreate' ? 'pendingCreate' : 'pendingUpdate';
+      final now = DateTime.now().toIso8601String();
+      final trimmedPhone = customerPhone.trim();
+
+      if (prevStatus != 'refunded' && prevPhone.isNotEmpty) {
+        final totalDelta = grandTotal - prevTotal;
+        if (totalDelta.abs() > 0.001) {
+          final custRows = await txn.query(
+            'customers',
+            columns: ['id', 'total_spent', 'sync_status'],
+            where: 'phone = ? AND deleted_at IS NULL',
+            whereArgs: [prevPhone],
+            limit: 1,
+          );
+          if (custRows.isNotEmpty) {
+            final cust = custRows.first;
+            final oldSpent = (cust['total_spent'] as num?)?.toDouble() ?? 0.0;
+            final updatedSpent = (oldSpent + totalDelta) > 0 ? (oldSpent + totalDelta) : 0.0;
+            final cSync = cust['sync_status'] as String? ?? 'synced';
+            await txn.update(
+              'customers',
+              {
+                'total_spent': updatedSpent,
+                'updated_at': now,
+                'sync_status': cSync == 'pendingCreate' ? 'pendingCreate' : 'pendingUpdate',
+              },
+              where: 'id = ?',
+              whereArgs: [cust['id']],
+            );
+          }
+        }
+      }
+
+      final itemsJson = jsonEncode(items.map((i) => i.toJson()).toList());
+      await txn.update(
+        'orders',
+        {
+          'customer_name': customerName.trim().isNotEmpty ? customerName.trim() : 'Walk-in Customer',
+          'customer_phone': trimmedPhone,
+          'payment_method': paymentMethod.toLowerCase(),
+          'items_json': itemsJson,
+          'subtotal': subtotal,
+          'discount_amount': discountAmount,
+          'service_charge_amount': serviceChargeAmount,
+          'grand_total': grandTotal,
+          'notes': notes,
+          'updated_at': now,
+          'sync_status': newSync,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      final updatedRows = await txn.query('orders', where: 'id = ?', whereArgs: [id], limit: 1);
+      if (updatedRows.isEmpty) return null;
+      return _mapToOrder(updatedRows.first);
+    });
   }
 
   OrderModel _mapToOrder(Map<String, dynamic> r) {
@@ -1237,14 +1452,20 @@ class LocalDatabase {
     ''', ['$todayDateStr%', todayStart, todayEnd]);
     final todayExpenseTotal = (expToday.first['exp'] as num?)?.toDouble() ?? 0.0;
 
+    final weekDt = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+    final weekDateStr = '${weekDt.year}-${weekDt.month.toString().padLeft(2, '0')}-${weekDt.day.toString().padLeft(2, '0')}';
+    final monthDateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
+
     final expWeek = await db.rawQuery('''
-      SELECT SUM(amount) as exp FROM expenses WHERE date >= ? AND date <= ? AND deleted_at IS NULL
-    ''', [weekStart, todayEnd]);
+      SELECT SUM(amount) as exp FROM expenses 
+      WHERE ((date >= ? AND date <= ?) OR (date >= ? AND date <= ?)) AND deleted_at IS NULL
+    ''', [weekStart, todayEnd, weekDateStr, '$todayDateStr~']);
     final weekExpenseTotal = (expWeek.first['exp'] as num?)?.toDouble() ?? 0.0;
 
     final expMonth = await db.rawQuery('''
-      SELECT SUM(amount) as exp FROM expenses WHERE date >= ? AND date <= ? AND deleted_at IS NULL
-    ''', [monthStart, todayEnd]);
+      SELECT SUM(amount) as exp FROM expenses 
+      WHERE ((date >= ? AND date <= ?) OR (date >= ? AND date <= ?)) AND deleted_at IS NULL
+    ''', [monthStart, todayEnd, monthDateStr, '$todayDateStr~']);
     final monthExpenseTotal = (expMonth.first['exp'] as num?)?.toDouble() ?? 0.0;
 
     final expOverall = await db.rawQuery('''
@@ -1309,11 +1530,12 @@ class LocalDatabase {
     final custLoyal = (await db.rawQuery("SELECT COUNT(*) as c FROM customers WHERE loyalty_card_number != '' AND deleted_at IS NULL")).first['c'] as num? ?? 0;
     final custReturn = (await db.rawQuery('SELECT COUNT(*) as c FROM customers WHERE total_visits > 1 AND deleted_at IS NULL')).first['c'] as num? ?? 0;
 
-    // 10. Top Selling Items (parse items_json of recent orders)
+    // 10. Top Selling Items (parse items_json of most recent 300 orders)
     final recentOrders = await db.query(
       'orders',
       columns: ['items_json'],
       where: "order_status != 'refunded' AND deleted_at IS NULL",
+      orderBy: 'created_at DESC',
       limit: 300,
     );
     final itemSalesMap = <String, Map<String, dynamic>>{};
@@ -1326,11 +1548,9 @@ class LocalDatabase {
           final name = it['name']?.toString() ?? 'Dish';
           final qty = (it['quantity'] as num?)?.toInt() ?? 1;
           final sub = (it['subtotal'] as num?)?.toDouble() ?? 0.0;
-          if (!itemSalesMap.containsKey(name)) {
-            itemSalesMap[name] = {'_id': name, 'totalQuantity': 0, 'totalSales': 0.0};
-          }
-          itemSalesMap[name]!['totalQuantity'] += qty;
-          itemSalesMap[name]!['totalSales'] += sub;
+          final entry = itemSalesMap.putIfAbsent(name, () => {'_id': name, 'totalQuantity': 0, 'totalSales': 0.0});
+          entry['totalQuantity'] = (entry['totalQuantity'] as int? ?? 0) + qty;
+          entry['totalSales'] = (entry['totalSales'] as num? ?? 0.0).toDouble() + sub;
         }
       } catch (_) {}
     }
@@ -1399,13 +1619,52 @@ class LocalDatabase {
       }
     }
 
+    // Helper to extract dish breakdown from orders
+    List<Map<String, dynamic>> extractDishBreakdown(List<Map<String, dynamic>> ordersRows) {
+      final dishMap = <String, Map<String, dynamic>>{};
+      for (final o in ordersRows) {
+        final raw = o['items_json'] as String?;
+        if (raw == null) continue;
+        try {
+          final list = jsonDecode(raw) as List;
+          for (final it in list) {
+            final name = it['name']?.toString() ?? 'Dish';
+            final qty = (it['quantity'] as num?)?.toInt() ?? 1;
+            final sub = (it['subtotal'] as num?)?.toDouble() ?? 0.0;
+            final entry = dishMap.putIfAbsent(name, () => {'_id': name, 'name': name, 'totalQuantity': 0, 'totalSales': 0.0});
+            entry['totalQuantity'] = (entry['totalQuantity'] as int? ?? 0) + qty;
+            entry['totalSales'] = (entry['totalSales'] as num? ?? 0.0).toDouble() + sub;
+          }
+        } catch (_) {}
+      }
+      return dishMap.values.toList()
+        ..sort((a, b) => (b['totalQuantity'] as int).compareTo(a['totalQuantity'] as int));
+    }
+
+    final todayDishBreakdown = extractDishBreakdown(todayOrders);
+
+    final weekOrdersRows = await db.query(
+      'orders',
+      columns: ['items_json'],
+      where: "created_at >= ? AND created_at <= ? AND order_status != 'refunded' AND deleted_at IS NULL",
+      whereArgs: [weekStart, todayEnd],
+    );
+    final weekDishBreakdown = extractDishBreakdown(weekOrdersRows);
+
+    final monthOrdersRows = await db.query(
+      'orders',
+      columns: ['items_json'],
+      where: "created_at >= ? AND created_at <= ? AND order_status != 'refunded' AND deleted_at IS NULL",
+      whereArgs: [monthStart, todayEnd],
+    );
+    final monthDishBreakdown = extractDishBreakdown(monthOrdersRows);
+    final overallDishBreakdown = extractDishBreakdown(recentOrders);
+
     String todayTopDishName = '';
     int todayTopDishCount = 0;
-    if (todayItemSales.isNotEmpty) {
-      final sortedTodayItems = todayItemSales.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      todayTopDishName = sortedTodayItems.first.key;
-      todayTopDishCount = sortedTodayItems.first.value;
+    if (todayDishBreakdown.isNotEmpty) {
+      todayTopDishName = todayDishBreakdown.first['name'] as String? ?? '';
+      todayTopDishCount = todayDishBreakdown.first['totalQuantity'] as int? ?? 0;
     }
 
     // Weekly intervals for the current month (5 slots)
@@ -1426,27 +1685,19 @@ class LocalDatabase {
       }
     }
 
-    // Real Peak Selling Hour
+    // Real Peak Selling Hour (SQL-level GROUP BY for large-dataset speed)
     String peakSellingHour = 'No orders yet';
     if (overallOrderCount > 0) {
-      final allOrdersHours = await db.rawQuery('''
-        SELECT created_at FROM orders
-        WHERE order_status != 'refunded' AND deleted_at IS NULL
+      final peakRows = await db.rawQuery('''
+        SELECT CAST(substr(created_at, 12, 2) AS INTEGER) AS hr, COUNT(*) AS cnt
+        FROM orders
+        WHERE order_status != 'refunded' AND deleted_at IS NULL AND length(created_at) >= 13
+        GROUP BY hr
+        ORDER BY cnt DESC
+        LIMIT 1
       ''');
-      final hourHistogram = <int, int>{};
-      for (final row in allOrdersHours) {
-        final rawDate = row['created_at'] as String?;
-        if (rawDate != null) {
-          try {
-            final dt = DateTime.parse(rawDate);
-            hourHistogram[dt.hour] = (hourHistogram[dt.hour] ?? 0) + 1;
-          } catch (_) {}
-        }
-      }
-      if (hourHistogram.isNotEmpty) {
-        final sortedHours = hourHistogram.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value));
-        final peakH = sortedHours.first.key;
+      if (peakRows.isNotEmpty) {
+        final peakH = ((peakRows.first['hr'] as num?)?.toInt() ?? 0).clamp(0, 23);
         final period = peakH >= 12 ? 'PM' : 'AM';
         final displayH = peakH == 0 ? 12 : (peakH > 12 ? peakH - 12 : peakH);
         final nextH = (peakH + 1) % 24;
@@ -1484,6 +1735,10 @@ class LocalDatabase {
       'monthlyWeeklyRevenue': monthlyWeeklyRevenue,
       'topSellingItems': topItems.take(5).toList(),
       'leastSellingItems': topItems.reversed.take(5).toList(),
+      'todayDishBreakdown': todayDishBreakdown,
+      'weekDishBreakdown': weekDishBreakdown,
+      'monthDishBreakdown': monthDishBreakdown,
+      'overallDishBreakdown': overallDishBreakdown,
       'todayTopDishName': todayTopDishName,
       'todayTopDishCount': todayTopDishCount,
       'todayPaymentBreakdown': todayPaymentCounts,
@@ -1497,9 +1752,393 @@ class LocalDatabase {
     };
   }
 
+  Future<Map<String, dynamic>> computePeriodReports({
+    required String timeframe, // 'Daily', 'Weekly', 'Monthly', 'Yearly', 'Custom', 'All Time'
+    required DateTime referenceDate,
+    DateTime? customStartDate,
+    DateTime? customEndDate,
+  }) async {
+    final db = await database;
+    final now = DateTime.now();
+
+    late DateTime startDate;
+    late DateTime endDate;
+    late DateTime priorStart;
+    late DateTime priorEnd;
+    List<String> chartLabels = [];
+    List<double> chartDataPoints = [];
+
+    switch (timeframe) {
+      case 'Daily':
+        startDate = DateTime(referenceDate.year, referenceDate.month, referenceDate.day, 0, 0, 0);
+        endDate = DateTime(referenceDate.year, referenceDate.month, referenceDate.day, 23, 59, 59, 999);
+        final priorDate = referenceDate.subtract(const Duration(days: 1));
+        priorStart = DateTime(priorDate.year, priorDate.month, priorDate.day, 0, 0, 0);
+        priorEnd = DateTime(priorDate.year, priorDate.month, priorDate.day, 23, 59, 59, 999);
+        chartLabels = ['12-4A', '4-8A', '8-12P', '12-4P', '4-8P', '8-12A'];
+        chartDataPoints = List<double>.filled(6, 0.0);
+        break;
+
+      case 'Weekly':
+        final monday = DateTime(referenceDate.year, referenceDate.month, referenceDate.day)
+            .subtract(Duration(days: referenceDate.weekday - 1));
+        startDate = DateTime(monday.year, monday.month, monday.day, 0, 0, 0);
+        endDate = startDate.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59, milliseconds: 999));
+        priorStart = startDate.subtract(const Duration(days: 7));
+        priorEnd = endDate.subtract(const Duration(days: 7));
+        chartLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        chartDataPoints = List<double>.filled(7, 0.0);
+        break;
+
+      case 'Monthly':
+        startDate = DateTime(referenceDate.year, referenceDate.month, 1, 0, 0, 0);
+        final lastDay = DateTime(referenceDate.year, referenceDate.month + 1, 0).day;
+        endDate = DateTime(referenceDate.year, referenceDate.month, lastDay, 23, 59, 59, 999);
+
+        final prevYear = referenceDate.month == 1 ? referenceDate.year - 1 : referenceDate.year;
+        final prevMonth = referenceDate.month == 1 ? 12 : referenceDate.month - 1;
+        final prevLastDay = DateTime(prevYear, prevMonth + 1, 0).day;
+        priorStart = DateTime(prevYear, prevMonth, 1, 0, 0, 0);
+        priorEnd = DateTime(prevYear, prevMonth, prevLastDay, 23, 59, 59, 999);
+
+        chartLabels = ['Wk 1', 'Wk 2', 'Wk 3', 'Wk 4', 'Wk 5'];
+        chartDataPoints = List<double>.filled(5, 0.0);
+        break;
+
+      case 'Yearly':
+        startDate = DateTime(referenceDate.year, 1, 1, 0, 0, 0);
+        endDate = DateTime(referenceDate.year, 12, 31, 23, 59, 59, 999);
+        priorStart = DateTime(referenceDate.year - 1, 1, 1, 0, 0, 0);
+        priorEnd = DateTime(referenceDate.year - 1, 12, 31, 23, 59, 59, 999);
+        chartLabels = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+        chartDataPoints = List<double>.filled(12, 0.0);
+        break;
+
+      case 'Custom':
+        final rawStart = customStartDate ?? referenceDate;
+        final rawEnd = customEndDate ?? referenceDate;
+        final orderedStart = rawStart.isAfter(rawEnd) ? rawEnd : rawStart;
+        final orderedEnd = rawStart.isAfter(rawEnd) ? rawStart : rawEnd;
+        startDate = DateTime(orderedStart.year, orderedStart.month, orderedStart.day, 0, 0, 0);
+        endDate = DateTime(orderedEnd.year, orderedEnd.month, orderedEnd.day, 23, 59, 59, 999);
+        final spanDays = endDate.difference(startDate).inDays + 1;
+        priorEnd = startDate.subtract(const Duration(milliseconds: 1));
+        priorStart = DateTime(startDate.year, startDate.month, startDate.day).subtract(Duration(days: spanDays));
+
+        if (spanDays <= 1) {
+          chartLabels = ['12-4A', '4-8A', '8-12P', '12-4P', '4-8P', '8-12A'];
+          chartDataPoints = List<double>.filled(6, 0.0);
+        } else if (spanDays <= 14) {
+          chartLabels = List.generate(spanDays, (i) {
+            final d = startDate.add(Duration(days: i));
+            return DateFormat('d/M').format(d);
+          });
+          chartDataPoints = List<double>.filled(spanDays, 0.0);
+        } else if (spanDays <= 90) {
+          const buckets = 6;
+          final step = (spanDays / buckets).ceil();
+          chartLabels = List.generate(buckets, (i) {
+            final d = startDate.add(Duration(days: (i * step).clamp(0, spanDays - 1)));
+            return DateFormat('d MMM').format(d);
+          });
+          chartDataPoints = List<double>.filled(buckets, 0.0);
+        } else {
+          chartLabels = [];
+          chartDataPoints = [];
+        }
+        break;
+
+      case 'All Time':
+      default:
+        startDate = DateTime(2000, 1, 1);
+        endDate = DateTime(2099, 12, 31, 23, 59, 59, 999);
+        priorStart = startDate;
+        priorEnd = endDate;
+        break;
+    }
+
+    final startIso = startDate.toIso8601String();
+    final endIso = endDate.toIso8601String();
+    final priorStartIso = priorStart.toIso8601String();
+    final priorEndIso = priorEnd.toIso8601String();
+
+    // 1. Current Period Revenue & Order Count
+    final ordersRes = await db.rawQuery('''
+      SELECT COUNT(*) as cnt, SUM(grand_total) as rev
+      FROM orders
+      WHERE created_at >= ? AND created_at <= ? AND order_status != 'refunded' AND deleted_at IS NULL
+    ''', [startIso, endIso]);
+    final revenue = (ordersRes.first['rev'] as num?)?.toDouble() ?? 0.0;
+    final orderCount = (ordersRes.first['cnt'] as num?)?.toInt() ?? 0;
+
+    // 2. Prior Period Revenue (for % change comparison)
+    double priorRevenue = 0.0;
+    if (timeframe != 'All Time') {
+      final priorRes = await db.rawQuery('''
+        SELECT SUM(grand_total) as rev
+        FROM orders
+        WHERE created_at >= ? AND created_at <= ? AND order_status != 'refunded' AND deleted_at IS NULL
+      ''', [priorStartIso, priorEndIso]);
+      priorRevenue = (priorRes.first['rev'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    // 3. Expenses in Period & Category Breakdown (safe for Weekly/Custom/Monthly/Yearly/Daily/All Time)
+    final startDayStr = '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}';
+    final endDayStr = '${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}~';
+
+    final expRows = await db.rawQuery('''
+      SELECT category, SUM(amount) as total, COUNT(*) as cnt
+      FROM expenses
+      WHERE (
+        (date >= ? AND date <= ?) OR
+        (date >= ? AND date <= ?)
+      ) AND deleted_at IS NULL
+      GROUP BY category
+      ORDER BY total DESC
+    ''', [startIso, endIso, startDayStr, endDayStr]);
+
+    double expenses = 0.0;
+    final expenseBreakdown = <Map<String, dynamic>>[];
+    for (final row in expRows) {
+      final amt = (row['total'] as num?)?.toDouble() ?? 0.0;
+      expenses += amt;
+      expenseBreakdown.add({
+        'category': row['category'] as String? ?? 'Miscellaneous',
+        'amount': amt,
+        'count': (row['cnt'] as num?)?.toInt() ?? 0,
+      });
+    }
+
+    // 4. Order rows details in Period (Dishes, Payments, Peak Hour, Chart Buckets)
+    final periodOrders = await db.query(
+      'orders',
+      columns: ['created_at', 'grand_total', 'payment_method', 'items_json', 'customer_phone', 'customer_name'],
+      where: "created_at >= ? AND created_at <= ? AND order_status != 'refunded' AND deleted_at IS NULL",
+      whereArgs: [startIso, endIso],
+    );
+
+    final paymentAnalytics = <String, double>{
+      'cash': 0.0,
+      'upi': 0.0,
+      'card': 0.0,
+      'wallet': 0.0,
+    };
+    final dishMap = <String, Map<String, dynamic>>{};
+    final hourHistogram = <int, int>{};
+    final allTimeMonthlyMap = <String, double>{};
+    final activeGuestKeys = <String>{};
+
+    for (final o in periodOrders) {
+      final total = (o['grand_total'] as num?)?.toDouble() ?? 0.0;
+      final method = (o['payment_method'] as String? ?? 'cash').toLowerCase();
+      paymentAnalytics[method] = (paymentAnalytics[method] ?? 0.0) + total;
+
+      final phone = (o['customer_phone'] as String? ?? '').trim();
+      final custName = (o['customer_name'] as String? ?? '').trim();
+      if (phone.isNotEmpty) {
+        activeGuestKeys.add(phone);
+      } else if (custName.isNotEmpty && custName.toLowerCase() != 'guest' && custName.toLowerCase() != 'walk-in customer') {
+        activeGuestKeys.add(custName.toLowerCase());
+      }
+
+      final createdAtStr = o['created_at'] as String?;
+      if (createdAtStr != null) {
+        try {
+          final dt = DateTime.parse(createdAtStr).toLocal();
+          hourHistogram[dt.hour] = (hourHistogram[dt.hour] ?? 0) + 1;
+
+          switch (timeframe) {
+            case 'Daily':
+              final bucket = (dt.hour / 4).floor().clamp(0, 5);
+              chartDataPoints[bucket] += total;
+              break;
+            case 'Weekly':
+              final idx = (dt.weekday - 1).clamp(0, 6);
+              chartDataPoints[idx] += total;
+              break;
+            case 'Monthly':
+              final idx = ((dt.day - 1) ~/ 7).clamp(0, 4);
+              chartDataPoints[idx] += total;
+              break;
+            case 'Yearly':
+              final idx = (dt.month - 1).clamp(0, 11);
+              chartDataPoints[idx] += total;
+              break;
+            case 'Custom':
+              final spanDays = endDate.difference(startDate).inDays + 1;
+              if (spanDays <= 1) {
+                final bucket = (dt.hour / 4).floor().clamp(0, 5);
+                chartDataPoints[bucket] += total;
+              } else if (spanDays <= 14) {
+                final dDiff = DateTime(dt.year, dt.month, dt.day)
+                    .difference(DateTime(startDate.year, startDate.month, startDate.day))
+                    .inDays
+                    .clamp(0, spanDays - 1);
+                chartDataPoints[dDiff] += total;
+              } else if (spanDays <= 90) {
+                const buckets = 6;
+                final step = (spanDays / buckets).ceil();
+                final dDiff = DateTime(dt.year, dt.month, dt.day)
+                    .difference(DateTime(startDate.year, startDate.month, startDate.day))
+                    .inDays;
+                final idx = (dDiff ~/ step).clamp(0, buckets - 1);
+                chartDataPoints[idx] += total;
+              } else {
+                final ym = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+                allTimeMonthlyMap[ym] = (allTimeMonthlyMap[ym] ?? 0.0) + total;
+              }
+              break;
+            case 'All Time':
+            default:
+              final ym = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+              allTimeMonthlyMap[ym] = (allTimeMonthlyMap[ym] ?? 0.0) + total;
+              break;
+          }
+        } catch (_) {}
+      }
+
+      final itemsRaw = o['items_json'] as String?;
+      if (itemsRaw != null) {
+        try {
+          final list = jsonDecode(itemsRaw) as List;
+          for (final it in list) {
+            final name = it['name']?.toString() ?? 'Dish';
+            final qty = (it['quantity'] as num?)?.toInt() ?? 1;
+            final sub = (it['subtotal'] as num?)?.toDouble() ?? 0.0;
+            final entry = dishMap.putIfAbsent(name, () => {'_id': name, 'name': name, 'totalQuantity': 0, 'totalSales': 0.0});
+            entry['totalQuantity'] = (entry['totalQuantity'] as int? ?? 0) + qty;
+            entry['totalSales'] = (entry['totalSales'] as num? ?? 0.0).toDouble() + sub;
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (timeframe == 'All Time' || (timeframe == 'Custom' && endDate.difference(startDate).inDays + 1 > 90)) {
+      if (allTimeMonthlyMap.isNotEmpty) {
+        final sortedKeys = allTimeMonthlyMap.keys.toList()..sort();
+        final displayKeys = sortedKeys.length > 12 ? sortedKeys.sublist(sortedKeys.length - 12) : sortedKeys;
+        if (displayKeys.length == 1) {
+          // Show 5 preceding months leading up to the active month so chart draws smoothly
+          final parts = displayKeys.first.split('-');
+          final y = int.parse(parts[0]);
+          final m = int.parse(parts[1]);
+          for (int k = 5; k >= 0; k--) {
+            final t = DateTime(y, m - k, 1);
+            final key = '${t.year}-${t.month.toString().padLeft(2, '0')}';
+            chartLabels.add(DateFormat('MMM yy').format(t));
+            chartDataPoints.add(allTimeMonthlyMap[key] ?? 0.0);
+          }
+        } else {
+          for (final ym in displayKeys) {
+            final parts = ym.split('-');
+            final dt = DateTime(int.parse(parts[0]), int.parse(parts[1]), 1);
+            chartLabels.add(displayKeys.length > 6 ? DateFormat('MMM').format(dt) : DateFormat('MMM yy').format(dt));
+            chartDataPoints.add(allTimeMonthlyMap[ym] ?? 0.0);
+          }
+        }
+      } else {
+        for (int m = 5; m >= 0; m--) {
+          final target = DateTime(now.year, now.month - m, 1);
+          chartLabels.add(DateFormat('MMM').format(target));
+          chartDataPoints.add(0.0);
+        }
+      }
+    }
+
+    final dishBreakdown = dishMap.values.toList()
+      ..sort((a, b) => (b['totalQuantity'] as int).compareTo(a['totalQuantity'] as int));
+
+    // Peak hour
+    String peakSellingHour = 'No orders for this period';
+    if (hourHistogram.isNotEmpty) {
+      final sortedHours = hourHistogram.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      final peakH = sortedHours.first.key;
+      final period = peakH >= 12 ? 'PM' : 'AM';
+      final displayH = peakH == 0 ? 12 : (peakH > 12 ? peakH - 12 : peakH);
+      final nextH = (peakH + 1) % 24;
+      final nextPeriod = nextH >= 12 ? 'PM' : 'AM';
+      final nextDisplayH = nextH == 0 ? 12 : (nextH > 12 ? nextH - 12 : nextH);
+      peakSellingHour = '$displayH:00 $period - $nextDisplayH:00 $nextPeriod';
+    }
+
+    // Customer analytics
+    final custTotal = (await db.rawQuery('SELECT COUNT(*) as c FROM customers WHERE deleted_at IS NULL')).first['c'] as num? ?? 0;
+    final custLoyal = (await db.rawQuery("SELECT COUNT(*) as c FROM customers WHERE loyalty_card_number != '' AND deleted_at IS NULL")).first['c'] as num? ?? 0;
+    final custReturn = (await db.rawQuery('SELECT COUNT(*) as c FROM customers WHERE total_visits > 1 AND deleted_at IS NULL')).first['c'] as num? ?? 0;
+
+    return {
+      'revenue': revenue,
+      'orderCount': orderCount,
+      'expenses': expenses,
+      'profit': revenue - expenses,
+      'priorRevenue': priorRevenue,
+      'averageBillValue': orderCount > 0 ? (revenue / orderCount) : 0.0,
+      'peakSellingHour': peakSellingHour,
+      'chartLabels': chartLabels,
+      'chartDataPoints': chartDataPoints,
+      'dishBreakdown': dishBreakdown,
+      'paymentAnalytics': paymentAnalytics,
+      'expenseBreakdown': expenseBreakdown,
+      'customerAnalytics': {
+        'totalCustomers': custTotal.toInt(),
+        'loyaltyMembers': custLoyal.toInt(),
+        'returningCustomers': custReturn.toInt(),
+        'periodActiveGuests': activeGuestKeys.length,
+        'rewardsRedeemed': 0,
+      },
+      'startDate': startDate,
+      'endDate': endDate,
+    };
+  }
+
   // ==========================================
   // SYNC HELPERS & CHANGE TRACKING
   // ==========================================
+
+  String _normalizePaymentMethodForSync(String? raw) {
+    final cleaned = (raw ?? 'cash').toLowerCase().trim();
+    if (cleaned == 'cash' || cleaned == 'upi' || cleaned == 'card' || cleaned == 'wallet') {
+      return cleaned;
+    }
+    if (cleaned.contains('upi') ||
+        cleaned.contains('gpay') ||
+        cleaned.contains('phonepe') ||
+        cleaned.contains('paytm') ||
+        cleaned.contains('qr') ||
+        cleaned.contains('online') ||
+        cleaned.contains('bank')) {
+      return 'upi';
+    }
+    if (cleaned.contains('card') || cleaned.contains('credit') || cleaned.contains('debit')) {
+      return 'card';
+    }
+    if (cleaned.contains('wallet')) {
+      return 'wallet';
+    }
+    return 'cash';
+  }
+
+  String _normalizeOrderStatusForSync(String? raw) {
+    final cleaned = (raw ?? 'completed').toLowerCase().trim();
+    if (cleaned == 'completed' || cleaned == 'edited' || cleaned == 'refunded') {
+      return cleaned;
+    }
+    return 'completed';
+  }
+
+  String _normalizePaymentStatusForSync(String? raw) {
+    final cleaned = (raw ?? 'paid').toLowerCase().trim();
+    if (cleaned == 'paid' || cleaned == 'pending') {
+      return cleaned;
+    }
+    return 'paid';
+  }
+
+  String _resolveOperationType(String syncStatus, String? serverId) {
+    if (syncStatus == 'pendingDelete') return 'delete';
+    if (syncStatus == 'pendingCreate') return 'create';
+    return (serverId == null || serverId.isEmpty) ? 'create' : 'update';
+  }
 
   Future<int> getPendingChangesCount() async {
     final db = await database;
@@ -1523,137 +2162,168 @@ class LocalDatabase {
     // 1. Settings
     final settingsRows = await db.query('business_settings', where: "sync_status != 'synced'");
     for (final r in settingsRows) {
+      final businessName = (r['business_name'] as String?)?.trim() ?? '';
       ops.add(SyncQueueItem(
-        operationId: _uuid.v4(),
+        operationId: 'settings:singleton:update:${r['updated_at'] ?? ''}',
         entityType: 'settings',
         operationType: 'update',
         localId: 'singleton',
         serverId: r['server_id'] as String?,
         payload: {
-          'businessName': r['business_name'],
-          'logo': r['logo'],
-          'phone': r['phone'],
-          'address': r['address'],
-          'gstin': r['gstin'],
-          'currency': r['currency'],
-          'invoicePrefix': r['invoice_prefix'],
-          'taxPercentage': r['tax_percentage'],
-          'serviceChargePercentage': r['service_charge_percentage'],
-          'invoiceFooter': r['invoice_footer'],
-          'loyaltyTargetVisits': r['loyalty_target_visits'],
-          'loyaltyRewardType': r['loyalty_reward_type'],
-          'loyaltyRewardDescription': r['loyalty_reward_description'],
+          'businessName': businessName.isNotEmpty ? businessName : 'HMB Bills',
+          'logo': r['logo'] ?? '',
+          'phone': r['phone'] ?? '',
+          'address': r['address'] ?? '',
+          'gstin': r['gstin'] ?? '',
+          'currency': r['currency'] ?? '₹',
+          'invoicePrefix': r['invoice_prefix'] ?? 'B',
+          'taxPercentage': r['tax_percentage'] ?? 0.0,
+          'serviceChargePercentage': r['service_charge_percentage'] ?? 0.0,
+          'invoiceFooter': r['invoice_footer'] ?? 'Thank you for dining with us!',
+          'loyaltyTargetVisits': r['loyalty_target_visits'] ?? 6,
+          'loyaltyRewardType': r['loyalty_reward_type'] ?? 'Free Drink',
+          'loyaltyRewardDescription': r['loyalty_reward_description'] ?? 'Free Drink',
         },
       ));
     }
 
-    // 2. Customers
+    // 2. Customers (preload lookup map so orders avoid N+1 server_id queries)
+    final custServerIdMap = <String, String>{};
+    final allCustIds = await db.query('customers', columns: ['id', 'server_id']);
+    for (final c in allCustIds) {
+      final cid = c['id'] as String?;
+      final sid = c['server_id'] as String?;
+      if (cid != null && sid != null && sid.isNotEmpty) {
+        custServerIdMap[cid] = sid;
+      }
+    }
+
     final custRows = await db.query('customers', where: "sync_status != 'synced'");
     for (final r in custRows) {
+      final localId = r['id'] as String;
+      final serverId = r['server_id'] as String?;
       final status = r['sync_status'] as String;
-      final opType = status == 'pendingDelete' ? 'delete' : (status == 'pendingCreate' ? 'create' : 'update');
+      final opType = _resolveOperationType(status, serverId);
+      if (opType == 'delete' && (serverId == null || serverId.isEmpty)) {
+        await db.delete('customers', where: 'id = ?', whereArgs: [localId]);
+        continue;
+      }
+
       ops.add(SyncQueueItem(
-        operationId: _uuid.v4(),
+        operationId: 'customer:$localId:$opType:${r['updated_at'] ?? ''}',
         entityType: 'customer',
         operationType: opType,
-        localId: r['id'] as String,
-        serverId: r['server_id'] as String?,
+        localId: localId,
+        serverId: serverId,
         payload: {
-          'name': r['name'],
-          'phone': r['phone'],
-          'address': r['address'],
+          'name': r['name'] ?? '',
+          'phone': (r['phone'] as String? ?? '').trim(),
+          'address': r['address'] ?? '',
           'birthday': r['birthday'],
-          'notes': r['notes'],
-          'totalVisits': r['total_visits'],
-          'totalSpent': r['total_spent'],
-          'loyaltyPoints': r['loyalty_points'],
-          'loyaltyCardNumber': r['loyalty_card_number'],
+          'notes': r['notes'] ?? '',
+          'totalVisits': r['total_visits'] ?? 0,
+          'totalSpent': r['total_spent'] ?? 0.0,
+          'loyaltyPoints': r['loyalty_points'] ?? 0,
+          'loyaltyCardNumber': r['loyalty_card_number'] ?? '',
         },
       ));
     }
 
-    // 3. Orders
+    // 3. Orders (preload menu_items server_id lookup map to avoid N*items queries)
+    final menuServerIdMap = <String, String>{};
+    final allMenuIds = await db.query('menu_items', columns: ['id', 'server_id']);
+    for (final m in allMenuIds) {
+      final mid = m['id'] as String?;
+      final sid = m['server_id'] as String?;
+      if (mid != null && sid != null && sid.isNotEmpty) {
+        menuServerIdMap[mid] = sid;
+      }
+    }
+
     final orderRows = await db.query('orders', where: "sync_status != 'synced'");
     for (final r in orderRows) {
+      final localId = r['id'] as String;
+      final serverId = r['server_id'] as String?;
       final status = r['sync_status'] as String;
-      final opType = status == 'pendingDelete' ? 'delete' : (status == 'pendingCreate' ? 'create' : 'update');
+      final opType = _resolveOperationType(status, serverId);
+      if (opType == 'delete' && (serverId == null || serverId.isEmpty)) {
+        await db.delete('orders', where: 'id = ?', whereArgs: [localId]);
+        continue;
+      }
 
       // Resolve customer server_id if present
       String? customerRef;
       final rawCustId = r['customer_id'] as String?;
       if (rawCustId != null && rawCustId.isNotEmpty) {
-        final custRows = await db.query(
-          'customers',
-          columns: ['server_id'],
-          where: 'id = ?',
-          whereArgs: [rawCustId],
-          limit: 1,
-        );
-        if (custRows.isNotEmpty &&
-            custRows.first['server_id'] != null &&
-            (custRows.first['server_id'] as String).isNotEmpty) {
-          customerRef = custRows.first['server_id'] as String;
-        } else {
-          customerRef = rawCustId;
-        }
+        customerRef = custServerIdMap[rawCustId] ?? rawCustId;
       }
 
-      List items = [];
+      final items = <dynamic>[];
       try {
         final rawItems = jsonDecode(r['items_json'] as String? ?? '[]');
         if (rawItems is List) {
           for (final rawIt in rawItems) {
-            if (rawIt is Map<String, dynamic>) {
+            if (rawIt is Map) {
               final itCopy = Map<String, dynamic>.from(rawIt);
               final rawMenuId = itCopy['menuItem']?.toString();
               if (rawMenuId != null && rawMenuId.isNotEmpty) {
-                final mRows = await db.query(
-                  'menu_items',
-                  columns: ['server_id'],
-                  where: 'id = ?',
-                  whereArgs: [rawMenuId],
-                  limit: 1,
-                );
-                if (mRows.isNotEmpty &&
-                    mRows.first['server_id'] != null &&
-                    (mRows.first['server_id'] as String).isNotEmpty) {
-                  itCopy['menuItem'] = mRows.first['server_id'] as String;
-                }
+                itCopy['menuItem'] = menuServerIdMap[rawMenuId] ?? rawMenuId;
               }
+              final itemName = (itCopy['name'] as String? ?? '').trim();
+              final itemPrice = (itCopy['price'] as num?)?.toDouble() ?? 0.0;
+              final rawQty = (itCopy['quantity'] as num?)?.toInt() ?? 1;
+              final qty = rawQty >= 1 ? rawQty : 1;
+              itCopy['name'] = itemName.isNotEmpty ? itemName : 'Item';
+              itCopy['price'] = itemPrice;
+              itCopy['quantity'] = qty;
+              itCopy['gstPercentage'] = (itCopy['gstPercentage'] as num?)?.toDouble() ?? 0.0;
+              itCopy['subtotal'] = (itCopy['subtotal'] as num?)?.toDouble() ?? (itemPrice * qty);
+              itCopy['notes'] = (itCopy['notes'] as String?) ?? '';
               items.add(itCopy);
-            } else {
-              items.add(rawIt);
             }
           }
         }
       } catch (_) {}
 
+      final orderPayload = <String, dynamic>{
+        'orderNumber': r['order_number'],
+        'customer': customerRef,
+        'customerId': customerRef,
+        'customerName': (r['customer_name'] as String?)?.trim().isNotEmpty == true
+            ? r['customer_name']
+            : 'Walk-in Customer',
+        'customerPhone': r['customer_phone'] ?? '',
+        'loyaltyCardNumber': r['loyalty_card_number'] ?? '',
+        'visitCount': r['visit_count'] ?? 1,
+        'rewardStatus': r['reward_status'] ?? '',
+        'orderStatus': _normalizeOrderStatusForSync(r['order_status'] as String?),
+        'items': items,
+        'subtotal': r['subtotal'] ?? 0.0,
+        'discountAmount': r['discount_amount'] ?? 0.0,
+        'gstAmount': r['gst_amount'] ?? 0.0,
+        'serviceChargeAmount': r['service_charge_amount'] ?? 0.0,
+        'grandTotal': r['grand_total'] ?? 0.0,
+        'paymentMethod': _normalizePaymentMethodForSync(r['payment_method'] as String?),
+        'paymentStatus': _normalizePaymentStatusForSync(r['payment_status'] as String?),
+        'notes': r['notes'] ?? '',
+      };
+
+      final createdAt = r['created_at'] as String?;
+      final updatedAt = r['updated_at'] as String?;
+      if (createdAt != null && createdAt.isNotEmpty) {
+        orderPayload['createdAt'] = createdAt;
+      }
+      if (updatedAt != null && updatedAt.isNotEmpty) {
+        orderPayload['updatedAt'] = updatedAt;
+      }
+
       ops.add(SyncQueueItem(
-        operationId: _uuid.v4(),
+        operationId: 'order:$localId:$opType:${updatedAt ?? ''}',
         entityType: 'order',
         operationType: opType,
-        localId: r['id'] as String,
-        serverId: r['server_id'] as String?,
-        payload: {
-          'orderNumber': r['order_number'],
-          'customer': customerRef,
-          'customerId': customerRef,
-          'customerName': r['customer_name'],
-          'customerPhone': r['customer_phone'],
-          'loyaltyCardNumber': r['loyalty_card_number'],
-          'visitCount': r['visit_count'],
-          'rewardStatus': r['reward_status'],
-          'orderStatus': r['order_status'],
-          'items': items,
-          'subtotal': r['subtotal'],
-          'discountAmount': r['discount_amount'],
-          'gstAmount': r['gst_amount'],
-          'serviceChargeAmount': r['service_charge_amount'],
-          'grandTotal': r['grand_total'],
-          'paymentMethod': r['payment_method'],
-          'paymentStatus': r['payment_status'],
-          'notes': r['notes'],
-        },
+        localId: localId,
+        serverId: serverId,
+        payload: orderPayload,
       ));
     }
 
@@ -1756,5 +2426,252 @@ class LocalDatabase {
         'deleted_at': null,
       });
     }
+  }
+
+  // ==========================================
+  // HIGH-THROUGHPUT BATCH IMPORTS (SCALE SAFE)
+  // ==========================================
+
+  Future<int> importOrdersBatch(List<Map<String, dynamic>> orderPayloads) async {
+    if (orderPayloads.isEmpty) return 0;
+    final db = await database;
+
+    return await db.transaction((txn) async {
+      // Preload existing sequence numbers per B-YYYYMMDD prefix to avoid N+1 queries
+      final existingNumRows = await txn.rawQuery(
+        "SELECT order_number FROM orders WHERE order_number LIKE 'B-%'",
+      );
+      final seqByDate = <String, int>{};
+      for (final r in existingNumRows) {
+        final numStr = r['order_number'] as String? ?? '';
+        final parts = numStr.split('-');
+        if (parts.length >= 3) {
+          final dateKey = '${parts[0]}-${parts[1]}';
+          final seq = int.tryParse(parts.last) ?? 0;
+          if (seq > (seqByDate[dateKey] ?? 0)) {
+            seqByDate[dateKey] = seq;
+          }
+        }
+      }
+
+      // Preload existing customers by trimmed phone to avoid N+1 reads/writes
+      final custRows = await txn.query(
+        'customers',
+        columns: ['id', 'phone', 'total_visits', 'total_spent', 'loyalty_card_number', 'sync_status'],
+        where: 'deleted_at IS NULL',
+      );
+      final custByPhone = <String, Map<String, dynamic>>{};
+      for (final c in custRows) {
+        final p = (c['phone'] as String? ?? '').trim();
+        if (p.isNotEmpty) {
+          custByPhone[p] = Map<String, dynamic>.from(c);
+        }
+      }
+
+      final custDeltas = <String, Map<String, dynamic>>{};
+      final batch = txn.batch();
+      int count = 0;
+
+      for (final payload in orderPayloads) {
+        final id = _uuid.v4();
+        final createdAt = (payload['createdAt'] as DateTime?) ?? DateTime.now();
+        final nowIso = createdAt.toIso8601String();
+
+        String orderNumber = (payload['orderNumber'] as String? ?? '').trim();
+        if (orderNumber.isEmpty) {
+          final d = DateTime.now();
+          final dateStr =
+              '${d.year}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
+          final key = 'B-$dateStr';
+          final nextSeq = (seqByDate[key] ?? 0) + 1;
+          seqByDate[key] = nextSeq;
+          orderNumber = '$key-${nextSeq.toString().padLeft(4, '0')}';
+        }
+
+        final items = payload['items'] as List<OrderItemModel>? ?? const [];
+        final itemsJson = jsonEncode(items.map((i) => i.toJson()).toList());
+        final custPhone = (payload['customerPhone'] as String? ?? '').trim();
+        final grandTotal = (payload['grandTotal'] as num?)?.toDouble() ?? 0.0;
+        final loyaltyCard = (payload['loyaltyCardNumber'] as String? ?? '').trim();
+
+        batch.insert(
+          'orders',
+          {
+            'id': id,
+            'server_id': null,
+            'order_number': orderNumber,
+            'customer_id': payload['customerId'],
+            'customer_name': (payload['customerName'] as String? ?? 'Guest').trim(),
+            'customer_phone': custPhone,
+            'loyalty_card_number': loyaltyCard,
+            'visit_count': 1,
+            'reward_status': '',
+            'order_status': 'completed',
+            'items_json': itemsJson,
+            'subtotal': (payload['subtotal'] as num?)?.toDouble() ?? grandTotal,
+            'discount_amount': (payload['discountAmount'] as num?)?.toDouble() ?? 0.0,
+            'gst_amount': (payload['gstAmount'] as num?)?.toDouble() ?? 0.0,
+            'service_charge_amount':
+                (payload['serviceChargeAmount'] as num?)?.toDouble() ?? 0.0,
+            'grand_total': grandTotal,
+            'payment_method':
+                (payload['paymentMethod'] as String? ?? 'cash').toLowerCase(),
+            'payment_status': 'paid',
+            'notes': payload['notes'] ?? 'Imported from Backup',
+            'created_at': nowIso,
+            'updated_at': nowIso,
+            'sync_status': 'pendingCreate',
+            'deleted_at': null,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+
+        if (custPhone.isNotEmpty && custByPhone.containsKey(custPhone)) {
+          final existing = custByPhone[custPhone]!;
+          final cid = existing['id'] as String;
+          final curDelta = custDeltas.putIfAbsent(cid, () => {
+                'visits': 0,
+                'spent': 0.0,
+                'baseVisits': (existing['total_visits'] as num?)?.toInt() ?? 0,
+                'baseSpent': (existing['total_spent'] as num?)?.toDouble() ?? 0.0,
+                'syncStatus': existing['sync_status'] as String? ?? 'synced',
+                'card': loyaltyCard,
+              });
+          curDelta['visits'] = (curDelta['visits'] as int) + 1;
+          curDelta['spent'] = (curDelta['spent'] as double) + grandTotal;
+          if (loyaltyCard.isNotEmpty) {
+            curDelta['card'] = loyaltyCard;
+          }
+        }
+        count++;
+      }
+
+      final updateNow = DateTime.now().toIso8601String();
+      for (final entry in custDeltas.entries) {
+        final d = entry.value;
+        final syncStatus = d['syncStatus'] == 'pendingCreate' ? 'pendingCreate' : 'pendingUpdate';
+        final updateMap = <String, dynamic>{
+          'total_visits': (d['baseVisits'] as int) + (d['visits'] as int),
+          'total_spent': (d['baseSpent'] as double) + (d['spent'] as double),
+          'updated_at': updateNow,
+          'sync_status': syncStatus,
+        };
+        if ((d['card'] as String).isNotEmpty) {
+          updateMap['loyalty_card_number'] = d['card'];
+        }
+        batch.update('customers', updateMap, where: 'id = ?', whereArgs: [entry.key]);
+      }
+
+      await batch.commit(noResult: true);
+      return count;
+    });
+  }
+
+  Future<int> importCustomersBatch(List<Map<String, dynamic>> customerPayloads) async {
+    if (customerPayloads.isEmpty) return 0;
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+
+    return await db.transaction((txn) async {
+      final batch = txn.batch();
+      int count = 0;
+      for (final data in customerPayloads) {
+        batch.insert(
+          'customers',
+          {
+            'id': _uuid.v4(),
+            'server_id': null,
+            'name': data['name'] ?? '',
+            'phone': (data['phone'] ?? '').toString().trim(),
+            'address': data['address'] ?? '',
+            'birthday': data['birthday'],
+            'notes': data['notes'] ?? '',
+            'total_visits': data['totalVisits'] ?? 0,
+            'total_spent': (data['totalSpent'] as num?)?.toDouble() ?? 0.0,
+            'loyalty_points': data['loyaltyPoints'] ?? 0,
+            'loyalty_card_number': data['loyaltyCardNumber'] ?? '',
+            'created_at': now,
+            'updated_at': now,
+            'sync_status': 'pendingCreate',
+            'deleted_at': null,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        count++;
+      }
+      await batch.commit(noResult: true);
+      return count;
+    });
+  }
+
+  Future<int> importMenuItemsBatch(List<MenuItemModel> items) async {
+    if (items.isEmpty) return 0;
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+
+    return await db.transaction((txn) async {
+      final batch = txn.batch();
+      int count = 0;
+      for (final item in items) {
+        batch.insert(
+          'menu_items',
+          {
+            'id': _uuid.v4(),
+            'server_id': null,
+            'category_id': item.categoryId,
+            'name': item.name,
+            'description': item.description,
+            'price': item.price,
+            'discount': item.discount,
+            'gst_percentage': item.gstPercentage,
+            'image': item.image,
+            'is_veg': item.isVeg ? 1 : 0,
+            'is_available': item.isAvailable ? 1 : 0,
+            'sort_order': 0,
+            'created_at': now,
+            'updated_at': now,
+            'sync_status': 'pendingCreate',
+            'deleted_at': null,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        count++;
+      }
+      await batch.commit(noResult: true);
+      return count;
+    });
+  }
+
+  Future<int> importExpensesBatch(List<Map<String, dynamic>> expensePayloads) async {
+    if (expensePayloads.isEmpty) return 0;
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+
+    return await db.transaction((txn) async {
+      final batch = txn.batch();
+      int count = 0;
+      for (final data in expensePayloads) {
+        batch.insert(
+          'expenses',
+          {
+            'id': _uuid.v4(),
+            'server_id': null,
+            'category': data['category'] ?? 'Miscellaneous',
+            'title': data['title'] ?? '',
+            'amount': (data['amount'] as num?)?.toDouble() ?? 0.0,
+            'date': data['date'] ?? now,
+            'notes': data['notes'] ?? '',
+            'created_at': now,
+            'updated_at': now,
+            'sync_status': 'pendingCreate',
+            'deleted_at': null,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        count++;
+      }
+      await batch.commit(noResult: true);
+      return count;
+    });
   }
 }

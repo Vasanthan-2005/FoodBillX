@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/order_model.dart';
 import '../repositories/order_repository.dart';
+import 'customer_provider.dart';
 import 'dashboard_provider.dart';
+import 'sync_provider.dart';
 
 enum OrderDateFilter { today, yesterday, thisWeek, thisMonth, custom }
 
@@ -100,6 +102,8 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     );
   }
 
+  static const int _pageSize = 100;
+
   Future<void> loadOrders({
     OrderDateFilter? dateFilter,
     DateTimeRange? customRange,
@@ -123,17 +127,21 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     );
 
     try {
-      final orders = await _repo.getAll(
+      final fetched = await _repo.getAll(
         startDate: start,
         endDate: end,
         paymentMethod: newPaymentFilter == 'ALL' ? null : newPaymentFilter.toLowerCase(),
+        limit: _pageSize + 1,
+        offset: 0,
       );
       if (generation != _loadGeneration) return;
+      final hasMore = fetched.length > _pageSize;
+      final orders = hasMore ? fetched.sublist(0, _pageSize) : fetched;
       state = state.copyWith(
         orders: orders,
         totalCount: orders.length,
         isLoading: false,
-        hasMore: false,
+        hasMore: hasMore,
       );
     } catch (e) {
       if (generation != _loadGeneration) return;
@@ -146,11 +154,101 @@ class OrdersNotifier extends StateNotifier<OrdersState> {
     }
   }
 
+  Future<void> loadMoreOrders() async {
+    if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
+
+    final generation = _loadGeneration;
+    final (start, end) = _calculateDateRange(state.dateFilter, state.customDateRange);
+    state = state.copyWith(isLoadingMore: true);
+
+    try {
+      final fetched = await _repo.getAll(
+        startDate: start,
+        endDate: end,
+        paymentMethod: state.selectedPaymentFilter == 'ALL'
+            ? null
+            : state.selectedPaymentFilter.toLowerCase(),
+        limit: _pageSize + 1,
+        offset: state.orders.length,
+      );
+      if (generation != _loadGeneration) return;
+      final hasMore = fetched.length > _pageSize;
+      final page = hasMore ? fetched.sublist(0, _pageSize) : fetched;
+      final combined = [...state.orders, ...page];
+      state = state.copyWith(
+        orders: combined,
+        totalCount: combined.length,
+        isLoadingMore: false,
+        hasMore: hasMore,
+      );
+    } catch (_) {
+      if (generation == _loadGeneration) {
+        state = state.copyWith(isLoadingMore: false);
+      }
+    }
+  }
+
   Future<bool> refundOrder(String orderId) async {
     try {
       await _repo.refund(orderId);
       await loadOrders(forceSpinner: false);
       _ref.read(dashboardProvider.notifier).refresh();
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        errorMessage: e.toString().replaceAll('Exception: ', ''),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> deleteOrder(String orderId) async {
+    try {
+      final deleted = await _repo.delete(orderId);
+      if (!deleted) return false;
+      await loadOrders(forceSpinner: false);
+      await _ref.read(dashboardProvider.notifier).refresh();
+      await _ref.read(customerProvider.notifier).loadCustomers();
+      await _ref.read(syncProvider.notifier).refreshStatus();
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        errorMessage: e.toString().replaceAll('Exception: ', ''),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> updateOrder({
+    required String orderId,
+    required String customerName,
+    required String customerPhone,
+    required String paymentMethod,
+    required List<OrderItemModel> items,
+    required double subtotal,
+    required double discountAmount,
+    required double serviceChargeAmount,
+    required double grandTotal,
+    String notes = '',
+  }) async {
+    try {
+      final updated = await _repo.update(
+        orderId: orderId,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        paymentMethod: paymentMethod,
+        items: items,
+        subtotal: subtotal,
+        discountAmount: discountAmount,
+        serviceChargeAmount: serviceChargeAmount,
+        grandTotal: grandTotal,
+        notes: notes,
+      );
+      if (updated == null) return false;
+      await loadOrders(forceSpinner: false);
+      await _ref.read(dashboardProvider.notifier).refresh();
+      await _ref.read(customerProvider.notifier).loadCustomers();
+      await _ref.read(syncProvider.notifier).refreshStatus();
       return true;
     } catch (e) {
       state = state.copyWith(

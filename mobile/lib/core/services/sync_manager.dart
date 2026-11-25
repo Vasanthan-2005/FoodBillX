@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../api/api_client.dart';
 import '../network/connectivity_service.dart';
 import '../storage/local_database.dart';
+import '../storage/sync_queue_item.dart';
 
 class SyncResult {
   final bool success;
@@ -29,7 +31,10 @@ class SyncManager {
 
   SyncManager(this._apiClient, this._connectivity);
 
-  Future<SyncResult> sync({bool force = false}) async {
+  Future<SyncResult> sync({
+    bool force = false,
+    void Function(int remaining, int pushed, int failed)? onProgress,
+  }) async {
     if (_isSyncing) {
       return const SyncResult(success: false, message: 'Sync already in progress');
     }
@@ -45,7 +50,7 @@ class SyncManager {
     _isSyncing = true;
     try {
       // 1. Push local pending changes to cloud
-      final pushRes = await _pushPendingChanges();
+      final pushRes = await _pushPendingChanges(onProgress: onProgress);
 
       // 2. Incrementally pull latest changes from cloud
       await _pullRemoteChanges();
@@ -91,7 +96,9 @@ class SyncManager {
 
   /// Pushes all pending local changes (orders, expenses, customers) to the cloud.
   /// Runs entirely non-blocking in the background without pulling or altering local data.
-  Future<SyncResult> pushOnly() async {
+  Future<SyncResult> pushOnly({
+    void Function(int remaining, int pushed, int failed)? onProgress,
+  }) async {
     if (_isSyncing) {
       return const SyncResult(success: false, message: 'Upload already in progress');
     }
@@ -106,7 +113,7 @@ class SyncManager {
 
     _isSyncing = true;
     try {
-      final pushRes = await _pushPendingChanges();
+      final pushRes = await _pushPendingChanges(onProgress: onProgress);
 
       if (pushRes.failedCount > 0 && pushRes.pushedCount == 0) {
         return SyncResult(
@@ -146,58 +153,148 @@ class SyncManager {
     }
   }
 
-  Future<({int pushedCount, int failedCount})> _pushPendingChanges() async {
+  /// Groups operations into small, byte-capped batches so order payloads
+  /// never exceed server JSON limits (e.g., 100 KB default) or HTTP timeouts.
+  static List<List<SyncQueueItem>> buildPushBatches(
+    List<SyncQueueItem> operations, {
+    int maxOpsPerBatch = 20,
+    int maxBatchBytes = 48 * 1024,
+  }) {
+    final batches = <List<SyncQueueItem>>[];
+    var currentBatch = <SyncQueueItem>[];
+    var currentBytes = 32; // {"operations":[]} wrapper overhead
+
+    for (final op in operations) {
+      final encodedLen = utf8.encode(jsonEncode(op.toJson())).length + 2;
+      final wouldExceedCount = currentBatch.length >= maxOpsPerBatch;
+      final wouldExceedBytes = currentBatch.isNotEmpty && (currentBytes + encodedLen) > maxBatchBytes;
+
+      if (wouldExceedCount || wouldExceedBytes) {
+        batches.add(currentBatch);
+        currentBatch = <SyncQueueItem>[];
+        currentBytes = 32;
+      }
+
+      currentBatch.add(op);
+      currentBytes += encodedLen;
+    }
+
+    if (currentBatch.isNotEmpty) {
+      batches.add(currentBatch);
+    }
+    return batches;
+  }
+
+  Future<({int pushed, int failed, bool connectionLost})> _pushBatchWithFallback(
+    List<SyncQueueItem> batch,
+  ) async {
+    try {
+      final payload = {
+        'operations': batch.map((op) => op.toJson()).toList(),
+      };
+
+      final response = await _apiClient.dio.post(
+        'sync/push',
+        data: payload,
+        options: Options(
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 90),
+        ),
+      );
+
+      final body = response.data;
+      final List? results = (body is Map && body['data'] is Map && body['data']['results'] is List)
+          ? body['data']['results'] as List
+          : (body is Map && body['results'] is List ? body['results'] as List : null);
+
+      if (results == null) {
+        return (pushed: 0, failed: batch.length, connectionLost: false);
+      }
+
+      int pushed = 0;
+      int failed = 0;
+      for (final res in results) {
+        if (res is! Map) continue;
+        final status = res['status']?.toString();
+        final serverId = res['serverId']?.toString();
+        final localId = res['localId']?.toString();
+        final entityType = res['entityType']?.toString();
+        final opType = res['operationType']?.toString();
+
+        if (status == 'success' && localId != null && entityType != null) {
+          await _localDb.markOperationSynced(
+            entityType,
+            localId,
+            serverId,
+            opType ?? 'create',
+          );
+          pushed++;
+        } else {
+          failed++;
+        }
+      }
+      return (pushed: pushed, failed: failed, connectionLost: false);
+    } on DioException catch (err) {
+      if (kDebugMode) print('Batch push error (${batch.length} ops): ${err.message}');
+      if (err.type == DioExceptionType.connectionError || err.type == DioExceptionType.unknown) {
+        return (pushed: 0, failed: batch.length, connectionLost: true);
+      }
+      // Split larger failing batches (e.g., 413 Payload Too Large or timeout) so valid records still sync
+      if (batch.length > 1) {
+        final mid = batch.length ~/ 2;
+        final firstRes = await _pushBatchWithFallback(batch.sublist(0, mid));
+        if (firstRes.connectionLost) {
+          return (
+            pushed: firstRes.pushed,
+            failed: firstRes.failed + (batch.length - mid),
+            connectionLost: true,
+          );
+        }
+        final secondRes = await _pushBatchWithFallback(batch.sublist(mid));
+        return (
+          pushed: firstRes.pushed + secondRes.pushed,
+          failed: firstRes.failed + secondRes.failed,
+          connectionLost: secondRes.connectionLost,
+        );
+      }
+      return (pushed: 0, failed: batch.length, connectionLost: false);
+    } catch (err) {
+      if (kDebugMode) print('Batch push error: $err');
+      return (pushed: 0, failed: batch.length, connectionLost: false);
+    }
+  }
+
+  Future<({int pushedCount, int failedCount})> _pushPendingChanges({
+    void Function(int remaining, int pushed, int failed)? onProgress,
+  }) async {
     final operations = await _localDb.getPendingOperations();
     if (operations.isEmpty) {
+      onProgress?.call(0, 0, 0);
       return (pushedCount: 0, failedCount: 0);
     }
 
     int pushed = 0;
     int failed = 0;
+    onProgress?.call(operations.length, 0, 0);
 
-    // Send in batches of up to 50 operations
-    const batchSize = 50;
-    for (int i = 0; i < operations.length; i += batchSize) {
-      final batch = operations.sublist(
-        i,
-        i + batchSize > operations.length ? operations.length : i + batchSize,
-      );
+    final batches = buildPushBatches(operations);
+    for (int i = 0; i < batches.length; i++) {
+      final batch = batches[i];
+      final res = await _pushBatchWithFallback(batch);
+      pushed += res.pushed;
+      failed += res.failed;
 
-      try {
-        final payload = {
-          'operations': batch.map((op) => op.toJson()).toList(),
-        };
-
-        final response = await _apiClient.dio.post('sync/push', data: payload);
-        final body = response.data;
-
-        if (body is Map && body['data'] is Map && body['data']['results'] is List) {
-          final results = body['data']['results'] as List;
-          for (final res in results) {
-            if (res is! Map) continue;
-            final status = res['status']?.toString();
-            final serverId = res['serverId']?.toString();
-            final localId = res['localId']?.toString();
-            final entityType = res['entityType']?.toString();
-            final opType = res['operationType']?.toString();
-
-            if (status == 'success' && localId != null && entityType != null) {
-              await _localDb.markOperationSynced(
-                entityType,
-                localId,
-                serverId,
-                opType ?? 'create',
-              );
-              pushed++;
-            } else {
-              failed++;
-            }
-          }
+      if (res.connectionLost) {
+        for (int j = i + 1; j < batches.length; j++) {
+          failed += batches[j].length;
         }
-      } catch (err) {
-        if (kDebugMode) print('Batch push error: $err');
-        failed += batch.length;
+        final remaining = await _localDb.getPendingChangesCount();
+        onProgress?.call(remaining, pushed, failed);
+        break;
       }
+
+      final remaining = await _localDb.getPendingChangesCount();
+      onProgress?.call(remaining, pushed, failed);
     }
 
     return (pushedCount: pushed, failedCount: failed);
@@ -583,7 +680,7 @@ class SyncManager {
     for (final t in tombstones) {
       if (t is! Map) continue;
       final entityType = t['entityType']?.toString();
-      final recordId = t['recordId']?.toString();
+      final recordId = t['recordId']?.toString() ?? t['serverId']?.toString();
       if (entityType == null || recordId == null) continue;
 
       final tableName = switch (entityType) {

@@ -115,12 +115,13 @@ class MoreMenuScreen extends StatelessWidget {
 
                 return Card(
                   margin: EdgeInsets.zero,
-                  color: isDark ? AppColors.darkCard : AppColors.lightCard,
+                  color: Theme.of(context).cardTheme.color ??
+                      (isDark ? AppColors.darkCard : AppColors.lightCard),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
                     side: BorderSide(
                       color: isDark
-                          ? AppColors.darkBorder
+                          ? Theme.of(context).dividerColor
                           : AppColors.lightBorder,
                       width: 1,
                     ),

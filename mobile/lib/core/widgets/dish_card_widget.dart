@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
+import '../theme/app_theme.dart';
 import '../utils/currency_formatter.dart';
 import '../../models/menu_item_model.dart';
 import 'dish_image_widget.dart';
@@ -23,14 +24,13 @@ class DishCardWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isAmoled = AppTheme.isAmoledTheme(context);
 
     return RepaintBoundary(
       child: Card(
-        elevation: 2,
+        elevation: isAmoled ? 0 : 2,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: AppTheme.cardShape(context, radius: 16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: onAddToCart,

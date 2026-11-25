@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/customer_model.dart';
 import '../repositories/customer_repository.dart';
+import 'sync_provider.dart';
 
 class CustomerState {
   final List<CustomerModel> customers;
@@ -34,8 +35,9 @@ class CustomerState {
 
 class CustomerNotifier extends StateNotifier<CustomerState> {
   final CustomerRepository _repo;
+  final Ref _ref;
 
-  CustomerNotifier(this._repo) : super(CustomerState.initial()) {
+  CustomerNotifier(this._repo, this._ref) : super(CustomerState.initial()) {
     loadCustomers();
   }
 
@@ -71,6 +73,7 @@ class CustomerNotifier extends StateNotifier<CustomerState> {
     try {
       await _repo.create(data);
       await loadCustomers(forceSpinner: false);
+      _ref.read(syncProvider.notifier).refreshStatus();
       return true;
     } catch (e) {
       state = state.copyWith(
@@ -93,6 +96,7 @@ class CustomerNotifier extends StateNotifier<CustomerState> {
           'loyaltyCardNumber': loyaltyCardNumber,
       });
       await loadCustomers(forceSpinner: false);
+      _ref.read(syncProvider.notifier).refreshStatus();
       return newCust;
     } catch (e) {
       state = state.copyWith(
@@ -106,6 +110,7 @@ class CustomerNotifier extends StateNotifier<CustomerState> {
     try {
       await _repo.update(id, data);
       await loadCustomers(forceSpinner: false);
+      _ref.read(syncProvider.notifier).refreshStatus();
       return true;
     } catch (e) {
       state = state.copyWith(
@@ -119,6 +124,7 @@ class CustomerNotifier extends StateNotifier<CustomerState> {
     try {
       await _repo.delete(id);
       await loadCustomers(forceSpinner: false);
+      _ref.read(syncProvider.notifier).refreshStatus();
       return true;
     } catch (_) {
       return false;
@@ -129,6 +135,7 @@ class CustomerNotifier extends StateNotifier<CustomerState> {
     try {
       await _repo.assignLoyaltyCard(id, cardNumber);
       await loadCustomers(forceSpinner: false);
+      _ref.read(syncProvider.notifier).refreshStatus();
       return true;
     } catch (e) {
       state = state.copyWith(
@@ -172,6 +179,6 @@ class CustomerNotifier extends StateNotifier<CustomerState> {
 final customerProvider = StateNotifierProvider<CustomerNotifier, CustomerState>(
   (ref) {
     final repo = ref.watch(customerRepositoryProvider);
-    return CustomerNotifier(repo);
+    return CustomerNotifier(repo, ref);
   },
 );

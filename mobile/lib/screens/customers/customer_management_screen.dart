@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/customer_validator.dart';
 import '../../core/utils/snackbar_utils.dart';
@@ -441,11 +441,6 @@ class _CustomerManagementScreenState
         title: const Text('Customer & Loyalty Directory'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () =>
-                ref.read(customerProvider.notifier).loadCustomers(forceSpinner: true),
-          ),
-          IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
             onPressed: widget.onOpenSettings,
@@ -552,9 +547,13 @@ class _CustomerManagementScreenState
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
+            shape: AppTheme.cardShape(context, radius: 16),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => _showCustomerFormDialog(c),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -728,23 +727,33 @@ class _CustomerManagementScreenState
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _StatChip(label: 'Visits', value: '$visits'),
-                      _StatChip(
-                        label: 'Points',
-                        value: '$points pts',
-                        color: AppColors.primary,
+                      Expanded(
+                        child: _StatChip(
+                          label: 'Visits',
+                          value: CurrencyFormatter.formatInteger(visits),
+                        ),
                       ),
-                      _StatChip(
-                        label: 'Spent',
-                        value: CurrencyFormatter.format(spent),
-                        color: AppColors.secondary,
+                      Expanded(
+                        child: _StatChip(
+                          label: 'Points',
+                          value: '${CurrencyFormatter.formatInteger(points)} pts',
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      Expanded(
+                        child: _StatChip(
+                          label: 'Spent',
+                          value: CurrencyFormatter.format(spent),
+                          color: AppColors.secondary,
+                        ),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-          ).animate().fadeIn(delay: (index * 20).ms);
+            ),
+          );
         },
       ),
     );
@@ -764,9 +773,16 @@ class _StatChip extends StatelessWidget {
       children: [
         Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
         const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(fontWeight: FontWeight.bold, color: color),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: TextStyle(fontWeight: FontWeight.bold, color: color),
+            ),
+          ),
         ),
       ],
     );

@@ -65,17 +65,33 @@ class OrderRepository {
     return refunded;
   }
 
-  Future<void> delete(String orderId) async {
-    final db = await _localDb.database;
-    await db.update(
-      'orders',
-      {
-        'deleted_at': DateTime.now().toIso8601String(),
-        'sync_status': 'pendingDelete',
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [orderId],
+  Future<bool> delete(String orderId) async {
+    return await _localDb.deleteOrderAndRecalculate(orderId);
+  }
+
+  Future<OrderModel?> update({
+    required String orderId,
+    required String customerName,
+    required String customerPhone,
+    required String paymentMethod,
+    required List<OrderItemModel> items,
+    required double subtotal,
+    required double discountAmount,
+    required double serviceChargeAmount,
+    required double grandTotal,
+    String notes = '',
+  }) async {
+    return await _localDb.updateOrderDetails(
+      id: orderId,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      paymentMethod: paymentMethod,
+      items: items,
+      subtotal: subtotal,
+      discountAmount: discountAmount,
+      serviceChargeAmount: serviceChargeAmount,
+      grandTotal: grandTotal,
+      notes: notes,
     );
   }
 

@@ -1,6 +1,8 @@
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'currency_formatter.dart';
+
 class WhatsAppHelper {
   static String cleanPhoneNumber(String rawPhone) {
     final digitsOnly = rawPhone.replaceAll(RegExp(r'\D'), '');
@@ -22,7 +24,7 @@ class WhatsAppHelper {
     buffer.writeln('🍽️ *Honeymoon Biryani - HMB Bills*');
     buffer.writeln('Dear ${customerName.isNotEmpty ? customerName : "Guest"}, thank you for dining with us!\n');
     buffer.writeln('📄 *Invoice #*: $orderNumber');
-    buffer.writeln('💰 *Total Amount*: ₹${grandTotal.toStringAsFixed(2)}');
+    buffer.writeln('💰 *Total Amount*: ${CurrencyFormatter.format(grandTotal)}');
 
     if (loyaltyCardNumber.isNotEmpty) {
       buffer.writeln('💳 *Loyalty Card #*: $loyaltyCardNumber');

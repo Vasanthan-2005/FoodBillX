@@ -82,6 +82,8 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
       return;
     }
 
+    final selectedCatId = ref.read(menuProvider).selectedCategoryId;
+
     final resultItem = await showModalBottomSheet<MenuItemModel>(
       context: context,
       isScrollControlled: true,
@@ -91,6 +93,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
       builder: (ctx) => _ItemFormSheet(
         categories: categories,
         existingItem: existingItem,
+        preselectedCategoryId: selectedCatId,
       ),
     );
 
@@ -281,8 +284,11 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
         return RepaintBoundary(
           child: Card(
             margin: const EdgeInsets.only(bottom: 12),
-            child: Padding(
-              padding: const EdgeInsets.all(14.0),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => _showItemFormDialog(item),
+              child: Padding(
+                padding: const EdgeInsets.all(14.0),
               child: Row(
                 children: [
                   Container(
@@ -326,6 +332,8 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                         const SizedBox(height: 4),
                         Text(
                           CurrencyFormatter.format(item.price),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 13,
                             color: AppColors.primary,
@@ -358,6 +366,7 @@ class _MenuManagementScreenState extends ConsumerState<MenuManagementScreen> {
                   ),
                   _ItemPopupMenu(item: item, onEdit: _showItemFormDialog),
                 ],
+              ),
               ),
             ),
           ),
@@ -600,6 +609,7 @@ class _CategoryManagerSheetState extends ConsumerState<_CategoryManagerSheet> {
                   itemBuilder: (ctx, i) {
                     final cat = categories[i];
                     return ListTile(
+                      onTap: () => _showAddEditDialog(cat.id, cat.name),
                       leading: CircleAvatar(
                         backgroundColor: AppColors.primary.withAlpha(30),
                         child: const Icon(
@@ -717,10 +727,12 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
 class _ItemFormSheet extends StatefulWidget {
   final List<CategoryModel> categories;
   final MenuItemModel? existingItem;
+  final String? preselectedCategoryId;
 
   const _ItemFormSheet({
     required this.categories,
     this.existingItem,
+    this.preselectedCategoryId,
   });
 
   @override
@@ -746,8 +758,16 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
     _discountController = TextEditingController(
       text: widget.existingItem?.discount.toString() ?? '0',
     );
-    _selectedCatId = widget.existingItem?.categoryId ??
-        (widget.categories.isNotEmpty ? widget.categories.first.id : '');
+    final existingCatId = widget.existingItem?.categoryId;
+    final hasExistingCat = existingCatId != null &&
+        widget.categories.any((c) => c.id == existingCatId);
+    final hasPreselectedCat = widget.preselectedCategoryId != null &&
+        widget.categories.any((c) => c.id == widget.preselectedCategoryId);
+    _selectedCatId = hasExistingCat
+        ? existingCatId
+        : (hasPreselectedCat
+            ? widget.preselectedCategoryId!
+            : (widget.categories.isNotEmpty ? widget.categories.first.id : ''));
     _isVeg = widget.existingItem?.isVeg ?? true;
     _selectedImage = widget.existingItem?.image ?? '';
   }
@@ -821,7 +841,9 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: isDark ? AppColors.darkCard : AppColors.lightBackground,
+                    color: isDark
+                        ? (Theme.of(context).cardTheme.color ?? AppColors.darkCard)
+                        : AppColors.lightBackground,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: _selectedImage.isEmpty
@@ -873,7 +895,7 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
               // Category Dropdown
               if (widget.categories.isNotEmpty)
                 DropdownButtonFormField<String>(
-                  initialValue: _selectedCatId.isNotEmpty
+                  initialValue: widget.categories.any((c) => c.id == _selectedCatId)
                       ? _selectedCatId
                       : widget.categories.first.id,
                   decoration: const InputDecoration(

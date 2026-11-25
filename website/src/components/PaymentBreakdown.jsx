@@ -1,14 +1,13 @@
 import React from 'react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { CreditCard, Wallet, Banknote, Smartphone } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
 
 const COLOR_MAP = {
-  Cash: '#10B981', // Emerald Green
-  UPI: '#3B82F6', // Vibrant Blue
-  Card: '#8B5CF6', // Purple
-  Wallet: '#F59E0B', // Amber
-  Others: '#64748B', // Slate
+  Cash: '#00E676',
+  UPI: '#22D3EE',
+  Card: '#A855F7',
+  Wallet: '#FFB300',
 };
 
 export const PaymentBreakdown = ({ paymentBreakdown = {} }) => {
@@ -22,23 +21,26 @@ export const PaymentBreakdown = ({ paymentBreakdown = {} }) => {
   const totalPayment = data.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <div className="glass-card p-6 rounded-3xl mb-8">
+    <div className="cyber-card cyber-card-hover p-6 rounded-3xl mb-8">
       <div className="flex items-center justify-between gap-2 mb-4">
         <div>
           <div className="flex items-center gap-2">
             <CreditCard className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-lg font-bold text-white tracking-tight">Payment Methods Breakdown</h2>
+            <h2 className="font-display text-lg font-bold text-white tracking-tight">
+              Payment Channels Matrix
+            </h2>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">Distribution of revenue by payment channel</p>
+          <p className="text-xs text-slate-400 mt-0.5">Collected revenue split by tender type</p>
         </div>
         <div className="text-right">
-          <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Collected</span>
+          <span className="text-[10px] font-mono text-slate-400 uppercase font-bold block">
+            Collected
+          </span>
           <span className="text-xl font-black text-emerald-400">{formatCurrency(totalPayment)}</span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
-        {/* Pie Donut Chart */}
         <div className="h-64 w-full">
           {data.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-500 text-sm">
@@ -51,25 +53,26 @@ export const PaymentBreakdown = ({ paymentBreakdown = {} }) => {
                   data={data}
                   cx="50%"
                   cy="50%"
-                  innerRadius={65}
-                  outerRadius={95}
+                  innerRadius={62}
+                  outerRadius={94}
                   paddingAngle={5}
                   dataKey="value"
                 >
                   {data.map((entry) => (
-                    <Cell key={entry.name} fill={COLOR_MAP[entry.name] || '#64748B'} stroke="rgba(0,0,0,0.5)" strokeWidth={2} />
+                    <Cell
+                      key={entry.name}
+                      fill={COLOR_MAP[entry.name] || '#64748B'}
+                      stroke="rgba(3,4,8,0.9)"
+                      strokeWidth={2}
+                    />
                   ))}
                 </Pie>
-                <Tooltip
-                  formatter={(val) => [formatCurrency(val), 'Revenue']}
-                  contentStyle={{ backgroundColor: '#0F172A', borderRadius: '12px', borderColor: 'rgba(255,255,255,0.1)' }}
-                />
+                <Tooltip formatter={(val) => [formatCurrency(val), 'Revenue']} />
               </PieChart>
             </ResponsiveContainer>
           )}
         </div>
 
-        {/* Payment Channel Cards */}
         <div className="space-y-3">
           {data.map((item) => {
             const Icon = item.icon;
@@ -77,14 +80,20 @@ export const PaymentBreakdown = ({ paymentBreakdown = {} }) => {
             const color = COLOR_MAP[item.name] || '#64748B';
 
             return (
-              <div key={item.name} className="glass-panel p-3.5 rounded-2xl flex items-center justify-between border border-slate-800">
+              <div
+                key={item.name}
+                className="cyber-panel p-3.5 rounded-2xl flex items-center justify-between border border-white/10"
+              >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${color}20`, color }}>
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center"
+                    style={{ backgroundColor: `${color}22`, color }}
+                  >
                     <Icon className="w-5 h-5" />
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-white">{item.name} Payments</h4>
-                    <span className="text-xs text-slate-400">{pct}% of total revenue</span>
+                    <span className="text-xs text-slate-400">{pct}% of period revenue</span>
                   </div>
                 </div>
                 <span className="text-base font-black text-white">{formatCurrency(item.value)}</span>

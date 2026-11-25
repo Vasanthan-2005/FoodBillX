@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../constants/app_colors.dart';
 
 class MetricCardWidget extends StatelessWidget {
@@ -22,7 +21,14 @@ class MetricCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final isAmoled = theme.scaffoldBackgroundColor == AppColors.amoledBackground;
+    final cardColor = theme.cardTheme.color ??
+        (isDark ? AppColors.darkCard : AppColors.lightCard);
+    final borderColor = isAmoled
+        ? AppColors.amoledBorder
+        : (isDark ? AppColors.darkBorder : AppColors.lightBorder);
 
     return InkWell(
       onTap: onTap,
@@ -30,21 +36,23 @@ class MetricCardWidget extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isDark ? AppColors.darkCard : AppColors.lightCard,
+          color: cardColor,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            color: borderColor,
             width: 1,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: isDark
-                  ? Colors.black.withAlpha(40)
-                  : Colors.black.withAlpha(10),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: isAmoled
+              ? null
+              : [
+                  BoxShadow(
+                    color: isDark
+                        ? Colors.black.withAlpha(40)
+                        : Colors.black.withAlpha(10),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -70,18 +78,11 @@ class MetricCardWidget extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isDark
-                          ? AppColors.darkTextSecondary
-                          : AppColors.lightTextSecondary,
+                      color: theme.textTheme.bodyMedium?.color ??
+                          (isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.lightTextSecondary),
                     ),
-                  ),
-                ),
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: color,
                   ),
                 ),
               ],
@@ -123,6 +124,6 @@ class MetricCardWidget extends StatelessWidget {
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 250.ms);
+    );
   }
 }

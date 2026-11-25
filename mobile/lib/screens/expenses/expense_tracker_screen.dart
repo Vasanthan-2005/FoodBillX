@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/snackbar_utils.dart';
 import '../../core/widgets/empty_state_widget.dart';
@@ -28,13 +28,30 @@ const List<String> defaultExpenseCategories = [
 
 class ExpenseTrackerScreen extends ConsumerStatefulWidget {
   final VoidCallback onOpenSettings;
-  const ExpenseTrackerScreen({super.key, required this.onOpenSettings});
+  final bool openAddOnLoad;
+
+  const ExpenseTrackerScreen({
+    super.key,
+    required this.onOpenSettings,
+    this.openAddOnLoad = false,
+  });
 
   @override
   ConsumerState<ExpenseTrackerScreen> createState() => _ExpenseTrackerScreenState();
 }
 
 class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.openAddOnLoad) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _showAddEditExpenseDialog();
+        }
+      });
+    }
+  }
   void _showSetBudgetDialog(double currentBudget) {
     final controller = TextEditingController(
       text: currentBudget > 0 ? currentBudget.toStringAsFixed(0) : '',
@@ -235,8 +252,9 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
         title: const Text('Expense Management'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => ref.read(expenseProvider.notifier).loadAll(forceSpinner: true),
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Add Expense',
+            onPressed: () => _showAddEditExpenseDialog(),
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -304,23 +322,34 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Total Expenses Logged',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Operational costs & stock purchases',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total Expenses Logged',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Operational costs & stock purchases',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
               ),
-              Text(
-                CurrencyFormatter.format(totalAmount),
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
+              const SizedBox(width: 10),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    CurrencyFormatter.format(totalAmount),
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
+                  ),
+                ),
               ),
             ],
           ),
@@ -329,7 +358,7 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
         // Monthly Budget Card (Offline-First with Auto-Reset)
         Card(
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: AppTheme.cardShape(context, radius: 16),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -338,36 +367,51 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.savings_rounded, color: AppColors.primary, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${DateFormat('MMMM yyyy').format(DateTime.now())} Budget',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                    InkWell(
-                      onTap: () => _showSetBudgetDialog(state.monthlyBudget),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        child: Row(
-                          children: [
-                            Text(
-                              state.monthlyBudget > 0
-                                  ? CurrencyFormatter.format(state.monthlyBudget)
-                                  : 'Set Budget',
-                              style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.savings_rounded, color: AppColors.primary, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${DateFormat('MMMM yyyy').format(DateTime.now())} Budget',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                             ),
-                            const SizedBox(width: 2),
-                            const Icon(Icons.edit_outlined, size: 14, color: AppColors.primary),
-                          ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: InkWell(
+                        onTap: () => _showSetBudgetDialog(state.monthlyBudget),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    state.monthlyBudget > 0
+                                        ? CurrencyFormatter.format(state.monthlyBudget)
+                                        : 'Set Budget',
+                                    style: const TextStyle(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(Icons.edit_outlined, size: 14, color: AppColors.primary),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -393,20 +437,33 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Spent: ${CurrencyFormatter.format(state.monthExpenseTotal)}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Spent: ${CurrencyFormatter.format(state.monthExpenseTotal)}',
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ),
                     ),
-                    Text(
-                      state.monthlyBudget > 0
-                          ? (state.isOverBudget
-                              ? 'Over budget by ${CurrencyFormatter.format(state.monthExpenseTotal - state.monthlyBudget)}'
-                              : 'Remaining: ${CurrencyFormatter.format(state.budgetRemaining)}')
-                          : 'Auto-resets every 1st of month',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: state.isOverBudget ? Colors.red : Colors.grey.shade700,
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          state.monthlyBudget > 0
+                              ? (state.isOverBudget
+                                  ? 'Over budget by ${CurrencyFormatter.format(state.monthExpenseTotal - state.monthlyBudget)}'
+                                  : 'Remaining: ${CurrencyFormatter.format(state.budgetRemaining)}')
+                              : 'Auto-resets every 1st of month',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: state.isOverBudget ? Colors.red : Colors.grey.shade700,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -425,14 +482,17 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
                   actionLabel: 'Add Expense',
                   onActionPressed: () => _showAddEditExpenseDialog(),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+              : RefreshIndicator(
+                  onRefresh: () => ref.read(expenseProvider.notifier).loadAll(forceSpinner: true),
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
                   itemCount: expenses.length,
                   itemBuilder: (ctx, index) {
                     final exp = expenses[index];
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: AppTheme.cardShape(context, radius: 16),
                       child: ListTile(
                         onTap: () => _showAddEditExpenseDialog(exp),
                         leading: CircleAvatar(
@@ -450,12 +510,19 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              '- ${CurrencyFormatter.format(exp.amount)}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 15,
-                                color: Colors.red.shade400,
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 125),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  '- ${CurrencyFormatter.format(exp.amount)}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 15,
+                                    color: Colors.red.shade400,
+                                  ),
+                                ),
                               ),
                             ),
                             IconButton(
@@ -465,7 +532,7 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
                                   context: context,
                                   builder: (c) => AlertDialog(
                                     title: const Text('Delete Expense?'),
-                                    content: Text('Delete "${exp.title}" (₹${exp.amount.toStringAsFixed(0)})?'),
+                                    content: Text('Delete "${exp.title}" (${CurrencyFormatter.format(exp.amount)})?'),
                                     actions: [
                                       TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
                                       ElevatedButton(
@@ -487,9 +554,10 @@ class _ExpenseTrackerScreenState extends ConsumerState<ExpenseTrackerScreen> {
                           ],
                         ),
                       ),
-                    ).animate().fadeIn(delay: (index * 20).ms);
+                    );
                   },
                 ),
+              ),
         ),
       ],
     );

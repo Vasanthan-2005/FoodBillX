@@ -26,6 +26,13 @@ class SyncController {
         throw new AppError('A sync batch cannot exceed 100 operations', 400);
       }
       const results = await syncService.pushBatch(operations);
+      if (req.io) {
+        req.io.emit('data_updated', {
+          source: 'sync_push',
+          count: results.length,
+          timestamp: new Date().toISOString(),
+        });
+      }
       return sendSuccess(res, 200, 'Sync push batch processed', { results });
     } catch (error) {
       next(error);

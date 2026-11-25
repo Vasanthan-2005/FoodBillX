@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/pdf_invoice_helper.dart';
 import '../../core/utils/snackbar_utils.dart';
+import '../../core/widgets/custom_date_range_dialog.dart';
 import '../../core/widgets/empty_state_widget.dart';
 import '../../core/widgets/error_state_widget.dart';
 import '../../core/widgets/skeleton_loader.dart';
@@ -33,24 +34,18 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   }
 
   void _pickCustomDateRange() async {
-    final now = DateTime.now();
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: now,
-      initialDateRange: DateTimeRange(
-        start: now.subtract(const Duration(days: 7)),
-        end: now,
-      ),
+    final ordersState = ref.read(ordersProvider);
+    final picked = await showCustomDateRangeModal(
+      context,
+      initialStart: ordersState.customDateRange?.start,
+      initialEnd: ordersState.customDateRange?.end,
+      title: 'Filter Orders Date Range',
     );
 
     if (picked != null) {
       ref.read(ordersProvider.notifier).loadOrders(
             dateFilter: OrderDateFilter.custom,
-            customRange: DateTimeRange(
-              start: DateTime(picked.start.year, picked.start.month, picked.start.day, 0, 0, 0),
-              end: DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59),
-            ),
+            customRange: picked,
           );
     }
   }
@@ -68,10 +63,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             icon: const Icon(Icons.date_range_rounded),
             tooltip: 'Pick Custom Date Range',
             onPressed: _pickCustomDateRange,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => ref.read(ordersProvider.notifier).loadOrders(forceSpinner: true),
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -232,31 +223,58 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-        itemCount: filtered.length,
+        itemCount: filtered.length + (ordersState.hasMore ? 1 : 0),
         itemBuilder: (ctx, index) {
+          if (index == filtered.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: ordersState.isLoadingMore
+                    ? const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: CircularProgressIndicator(),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: () => ref.read(ordersProvider.notifier).loadMoreOrders(),
+                        icon: const Icon(Icons.expand_more_rounded),
+                        label: const Text('Load Older Orders'),
+                      ),
+              ),
+            );
+          }
+
           final order = filtered[index];
           final dateStr = order.createdAt;
           final isRefunded = order.orderStatus == 'refunded';
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
+            shape: AppTheme.cardShape(context, radius: 16),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => _showEditOrderDialog(context, order),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        order.orderNumber,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                          color: AppColors.primary,
+                      Expanded(
+                        child: Text(
+                          order.orderNumber,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Row(
                         children: [
                           Container(
@@ -313,45 +331,56 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        CurrencyFormatter.format(order.grandTotal),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          decoration: isRefunded ? TextDecoration.lineThrough : null,
-                          color: isRefunded ? Colors.grey : AppColors.primary,
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            CurrencyFormatter.format(order.grandTotal),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              decoration: isRefunded ? TextDecoration.lineThrough : null,
+                              color: isRefunded ? Colors.grey : AppColors.primary,
+                            ),
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Row(
                         children: [
-                          if (!isRefunded)
-                            TextButton.icon(
-                              onPressed: () async {
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (c) => AlertDialog(
-                                    title: const Text('Refund Order?'),
-                                    content: Text('Are you sure you want to refund order #${order.orderNumber}? This will deduct from total revenue and profit.'),
-                                    actions: [
-                                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-                                      ElevatedButton(
-                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                        onPressed: () => Navigator.pop(c, true),
-                                        child: const Text('Refund'),
-                                      ),
-                                    ],
+                          TextButton.icon(
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (c) => AlertDialog(
+                                  title: const Text('Delete Order?'),
+                                  content: Text(
+                                    'Permanently delete order #${order.orderNumber} (${CurrencyFormatter.format(order.grandTotal)}) from the database? Sales, profit, dish, and customer totals will be updated.',
                                   ),
-                                );
-                                if (confirm == true) {
-                                  final success = await ref.read(ordersProvider.notifier).refundOrder(order.id);
-                                  if (mounted && success) {
-                                    SnackbarUtils.showSuccess(context, 'Order #${order.orderNumber} refunded.');
-                                  }
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(c, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                      onPressed: () => Navigator.pop(c, true),
+                                      child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                final success = await ref.read(ordersProvider.notifier).deleteOrder(order.id);
+                                if (mounted && success) {
+                                  SnackbarUtils.showSuccess(context, 'Order #${order.orderNumber} deleted.');
                                 }
-                              },
-                              icon: const Icon(Icons.undo_rounded, size: 16, color: Colors.red),
-                              label: const Text('Refund', style: TextStyle(color: Colors.red, fontSize: 12)),
-                            ),
+                              }
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.red),
+                            label: const Text('Delete', style: TextStyle(color: Colors.red, fontSize: 12)),
+                          ),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -366,10 +395,256 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   ),
                 ],
               ),
+              ),
             ),
-          ).animate().fadeIn(delay: (index * 20).ms);
+          );
         },
       ),
+    );
+  }
+
+  void _showEditOrderDialog(BuildContext context, OrderModel order) {
+    final nameController = TextEditingController(text: order.customerName);
+    final phoneController = TextEditingController(text: order.customerPhone);
+    String selectedPayment = ['cash', 'upi', 'card', 'wallet'].contains(order.paymentMethod.toLowerCase())
+        ? order.paymentMethod.toLowerCase()
+        : 'cash';
+    final editableItems = order.items
+        .map((it) => OrderItemModel(
+              menuItemId: it.menuItemId,
+              name: it.name,
+              price: it.price,
+              quantity: it.quantity,
+              gstPercentage: it.gstPercentage,
+              subtotal: it.subtotal,
+              notes: it.notes,
+            ))
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final newSubtotal = editableItems.fold<double>(
+              0.0,
+              (sum, i) => sum + (i.price * i.quantity),
+            );
+            final clampedDiscount = order.discountAmount > newSubtotal
+                ? newSubtotal
+                : order.discountAmount;
+            final newGrandTotal = (newSubtotal - clampedDiscount + order.serviceChargeAmount)
+                .clamp(0.0, double.infinity)
+                .roundToDouble();
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 12, 8),
+              contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              title: Row(
+                children: [
+                  const Icon(Icons.edit_note_rounded, color: AppColors.primary, size: 24),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Edit Order #${order.orderNumber}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(dialogCtx),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Customer Name',
+                          prefixIcon: Icon(Icons.person_outline_rounded),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: phoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(
+                          labelText: 'Customer Phone',
+                          prefixIcon: Icon(Icons.phone_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedPayment,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Method',
+                          prefixIcon: Icon(Icons.payments_outlined),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'cash', child: Text('CASH')),
+                          DropdownMenuItem(value: 'upi', child: Text('UPI / QR')),
+                          DropdownMenuItem(value: 'card', child: Text('CARD')),
+                          DropdownMenuItem(value: 'wallet', child: Text('WALLET')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() => selectedPayment = val);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Items Ordered:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      ...editableItems.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final item = entry.value;
+                        final lineTotal = item.price * item.quantity;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Theme.of(ctx).dividerColor.withAlpha(100)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                    ),
+                                    Text(
+                                      CurrencyFormatter.format(lineTotal),
+                                      style: const TextStyle(fontSize: 11.5, color: AppColors.primary, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: item.quantity > 1
+                                    ? () {
+                                        setDialogState(() {
+                                          final q = item.quantity - 1;
+                                          editableItems[idx] = OrderItemModel(
+                                            menuItemId: item.menuItemId,
+                                            name: item.name,
+                                            price: item.price,
+                                            quantity: q,
+                                            gstPercentage: item.gstPercentage,
+                                            subtotal: item.price * q,
+                                            notes: item.notes,
+                                          );
+                                        });
+                                      }
+                                    : null,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                child: Text(
+                                  '${item.quantity}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primary, size: 20),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () {
+                                  setDialogState(() {
+                                    final q = item.quantity + 1;
+                                    editableItems[idx] = OrderItemModel(
+                                      menuItemId: item.menuItemId,
+                                      name: item.name,
+                                      price: item.price,
+                                      quantity: q,
+                                      gstPercentage: item.gstPercentage,
+                                      subtotal: item.price * q,
+                                      notes: item.notes,
+                                    );
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const Divider(height: 18),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Updated Total:', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                CurrencyFormatter.format(newGrandTotal),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogCtx);
+                    _showOrderBillDialog(context, order);
+                  },
+                  child: const Text('View Bill'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(dialogCtx);
+                    final ok = await ref.read(ordersProvider.notifier).updateOrder(
+                          orderId: order.id,
+                          customerName: nameController.text.trim(),
+                          customerPhone: phoneController.text.trim(),
+                          paymentMethod: selectedPayment,
+                          items: editableItems,
+                          subtotal: newSubtotal,
+                          discountAmount: clampedDiscount,
+                          serviceChargeAmount: order.serviceChargeAmount,
+                          grandTotal: newGrandTotal,
+                        );
+                    if (mounted && ok) {
+                      SnackbarUtils.showSuccess(context, 'Order #${order.orderNumber} updated!');
+                    }
+                  },
+                  child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -500,9 +775,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                             ),
                           ),
-                          Text(
-                            CurrencyFormatter.format(item.subtotal),
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                CurrencyFormatter.format(item.subtotal),
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -516,7 +798,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Subtotal:'),
-                      Text(CurrencyFormatter.format(order.subtotal)),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(CurrencyFormatter.format(order.subtotal)),
+                        ),
+                      ),
                     ],
                   ),
                   if (order.discountAmount > 0) ...[
@@ -525,17 +814,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('Discount:'),
-                        Text('- ${CurrencyFormatter.format(order.discountAmount)}', style: const TextStyle(color: Colors.green)),
-                      ],
-                    ),
-                  ],
-                  if (order.gstAmount > 0) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('GST Tax:'),
-                        Text(CurrencyFormatter.format(order.gstAmount)),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text('- ${CurrencyFormatter.format(order.discountAmount)}', style: const TextStyle(color: Colors.green)),
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -544,9 +830,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Grand Total:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text(
-                        CurrencyFormatter.format(order.grandTotal),
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            CurrencyFormatter.format(order.grandTotal),
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.primary),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -570,7 +863,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     businessName: settings?.businessName ?? 'HMB Bills',
                     businessPhone: settings?.phone ?? '',
                     businessAddress: settings?.address ?? '',
-                    gstin: settings?.gstin ?? '',
+                    gstin: '',
                     invoicePrefix: settings?.invoicePrefix ?? 'INV-',
                     orderNumber: order.orderNumber,
                     orderDate: order.createdAt,
@@ -587,7 +880,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                         }).toList(),
                     subtotal: order.subtotal,
                     discount: order.discountAmount,
-                    gstAmount: order.gstAmount,
+                    gstAmount: 0.0,
                     serviceChargeAmount: order.serviceChargeAmount,
                     grandTotal: order.grandTotal,
                     paymentMethod: order.paymentMethod,
