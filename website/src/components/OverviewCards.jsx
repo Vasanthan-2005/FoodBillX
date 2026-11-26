@@ -4,134 +4,213 @@ import {
   IndianRupee,
   ShoppingBag,
   Receipt,
+  UserCheck,
   BadgePercent,
   Sparkles,
-  Users,
-  UserCheck,
   Award,
+  UtensilsCrossed,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
-import { formatCurrency, formatNumber } from '../utils/formatters';
+import { formatCompactCurrency, formatCurrency, formatNumber } from '../utils/formatters';
 
-export const OverviewCards = ({ kpis = {} }) => {
+export const OverviewCards = ({ kpis = {}, customerInsights = {} }) => {
   const {
     revenue = 0,
     ordersCount = 0,
     aov = 0,
     totalDiscount = 0,
     totalServiceCharge = 0,
+    itemsSoldTotal = 0,
     revenueGrowth = 0,
+    ordersGrowth = 0,
+    avgDailyRevenue = 0,
     returningPercent = 0,
     loyaltyMembers = 0,
     totalCustomers = 0,
   } = kpis;
 
-  const cards = [
+  const returningCustomers = customerInsights?.returningCustomers || 0;
+
+  const heroCards = [
     {
-      title: 'Period Revenue',
+      title: 'Total Sales Revenue',
       value: formatCurrency(revenue),
+      helper: avgDailyRevenue > 0 ? `Avg ${formatCompactCurrency(avgDailyRevenue)} / day` : 'Completed bill total',
       icon: IndianRupee,
-      color: 'from-[#FF6D00] to-[#FFB300]',
-      badge: `${revenueGrowth >= 0 ? '+' : ''}${revenueGrowth}% vs prior`,
-      badgeColor:
-        revenueGrowth >= 0
-          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-          : 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+      gradient: 'from-[#FF6D00] to-[#FFB300]',
+      glow: 'bg-[#FF6D00]/20',
+      trend: revenueGrowth,
+      badgeFallback: 'Gross Sales',
     },
     {
-      title: 'Orders Completed',
+      title: 'Total Orders',
       value: formatNumber(ordersCount),
+      helper: itemsSoldTotal > 0 ? `${formatNumber(itemsSoldTotal)} dishes ordered` : 'Completed customer bills',
       icon: ShoppingBag,
-      color: 'from-cyan-500 to-blue-600',
-      badge: 'Verified Bills',
-      badgeColor: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+      gradient: 'from-cyan-500 to-blue-600',
+      glow: 'bg-cyan-500/20',
+      trend: ordersGrowth,
+      badgeFallback: 'Verified Bills',
     },
     {
-      title: 'Avg Order Value',
+      title: 'Average Bill Value',
       value: formatCurrency(aov),
+      helper: 'Average spent per order',
       icon: Receipt,
-      color: 'from-purple-500 to-pink-500',
-      badge: 'Per Ticket',
-      badgeColor: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+      gradient: 'from-purple-500 to-pink-500',
+      glow: 'bg-purple-500/20',
+      trend: null,
+      badgeFallback: 'Per Order',
     },
     {
-      title: 'Discounts Applied',
-      value: formatCurrency(totalDiscount),
-      icon: BadgePercent,
-      color: 'from-amber-500 to-orange-500',
-      badge: 'Promo / Loyalty',
-      badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-    },
-    {
-      title: 'Service Charges',
-      value: formatCurrency(totalServiceCharge),
-      icon: Sparkles,
-      color: 'from-emerald-500 to-teal-400',
-      badge: 'Dine-In Fee',
-      badgeColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-    },
-    {
-      title: 'Total Customers',
-      value: formatNumber(totalCustomers),
-      icon: Users,
-      color: 'from-blue-500 to-indigo-500',
-      badge: 'CRM Directory',
-      badgeColor: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
-    },
-    {
-      title: 'Repeat Rate',
+      title: 'Repeat Customer Rate',
       value: `${returningPercent}%`,
+      helper:
+        totalCustomers > 0
+          ? `${formatNumber(returningCustomers)} returning of ${formatNumber(totalCustomers)} guests`
+          : 'Guests who visit again',
       icon: UserCheck,
-      color: 'from-indigo-500 to-violet-500',
-      badge: 'Returning Guests',
-      badgeColor: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+      gradient: 'from-emerald-500 to-teal-500',
+      glow: 'bg-emerald-500/20',
+      trend: null,
+      badgeFallback: `${formatNumber(loyaltyMembers)} Loyalty Cards`,
+    },
+  ];
+
+  const secondaryStats = [
+    {
+      label: 'Dishes Sold',
+      value: formatNumber(itemsSoldTotal),
+      hint: 'Total portions',
+      icon: UtensilsCrossed,
+      accent: 'text-[#FF8F00] bg-[#FF6D00]/15 border-[#FF6D00]/30',
     },
     {
-      title: 'Loyalty Members',
-      value: formatNumber(loyaltyMembers),
+      label: 'Total Customers',
+      value: formatNumber(totalCustomers),
+      hint: `${formatNumber(loyaltyMembers)} loyalty cards`,
       icon: Award,
-      color: 'from-pink-500 to-rose-500',
-      badge: 'Active Cards',
-      badgeColor: 'bg-pink-500/15 text-pink-300 border-pink-500/30',
+      accent: 'text-cyan-300 bg-cyan-500/15 border-cyan-500/30',
+    },
+    {
+      label: 'Discounts Given',
+      value: formatCurrency(totalDiscount),
+      hint: 'Promo & loyalty off',
+      icon: BadgePercent,
+      accent: 'text-amber-300 bg-amber-500/15 border-amber-500/30',
+    },
+    {
+      label: 'Service Charges',
+      value: formatCurrency(totalServiceCharge),
+      hint: 'Dine-in fee collected',
+      icon: Sparkles,
+      accent: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
     },
   ];
 
   return (
-    <section className="max-w-7xl mx-auto px-4 md:px-8 mb-8">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {cards.map((card, idx) => {
+    <section className="mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-4">
+        <div>
+          <h2 className="font-display text-lg font-bold text-white tracking-tight">
+            Key Performance Indicators
+          </h2>
+          <p className="text-xs text-slate-400">
+            Core sales, order activity, and customer retention numbers at a glance
+          </p>
+        </div>
+      </div>
+
+      {/* Row 1: 4 Clear Hero KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
+        {heroCards.map((card, idx) => {
           const Icon = card.icon;
+          const hasTrend = card.trend !== null && card.trend !== 0;
+          const isPositive = (card.trend || 0) >= 0;
+
           return (
             <motion.div
               key={card.title}
-              initial={{ opacity: 0, y: 18 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: idx * 0.04 }}
+              transition={{ duration: 0.32, delay: idx * 0.04 }}
               className="cyber-card cyber-card-hover p-5 rounded-2xl relative overflow-hidden"
             >
               <div
-                className={`absolute -right-6 -bottom-6 w-28 h-28 rounded-full bg-gradient-to-br ${card.color} opacity-15 blur-2xl pointer-events-none`}
+                className={`absolute -right-8 -bottom-8 w-28 h-28 rounded-full ${card.glow} blur-2xl pointer-events-none`}
               />
 
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold text-slate-400 tracking-wide">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <span className="text-xs font-semibold text-slate-300 tracking-wide">
                   {card.title}
                 </span>
                 <div
-                  className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${card.color} flex items-center justify-center shadow-lg`}
+                  className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${card.gradient} flex items-center justify-center shadow-lg shrink-0`}
                 >
-                  <Icon className="w-5 h-5 text-white" />
+                  <Icon className="w-4 h-4 text-white" />
                 </div>
               </div>
 
-              <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                <span className="text-2xl font-black text-white tracking-tight">
+              <div className="flex items-baseline justify-between gap-2 flex-wrap mb-2">
+                <span className="text-2xl md:text-[26px] font-black text-white tracking-tight tabular-nums">
                   {card.value}
                 </span>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${card.badgeColor}`}
-                >
-                  {card.badge}
+
+                {hasTrend ? (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border tabular-nums ${
+                      isPositive
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                        : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                    }`}
+                  >
+                    {isPositive ? (
+                      <TrendingUp className="w-3 h-3" />
+                    ) : (
+                      <TrendingDown className="w-3 h-3" />
+                    )}
+                    {isPositive ? '+' : ''}
+                    {card.trend}% vs prior
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10">
+                    {card.badgeFallback}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-[11px] text-slate-400 truncate">{card.helper}</p>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Row 2: 4 Compact Secondary Operational Tiles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {secondaryStats.map((stat, idx) => {
+          const Icon = stat.icon;
+          return (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.16 + idx * 0.03 }}
+              className="cyber-panel cyber-card-hover px-4 py-3 rounded-2xl flex items-center justify-between gap-3"
+            >
+              <div className="min-w-0">
+                <span className="text-[11px] font-medium text-slate-400 block truncate">
+                  {stat.label}
                 </span>
+                <span className="text-base font-extrabold text-white tabular-nums block truncate">
+                  {stat.value}
+                </span>
+                <span className="text-[10px] text-slate-500 block truncate">{stat.hint}</span>
+              </div>
+              <div
+                className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${stat.accent}`}
+              >
+                <Icon className="w-4 h-4" />
               </div>
             </motion.div>
           );

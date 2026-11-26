@@ -293,6 +293,7 @@ class ReportService {
       mostFreqAgg,
       hourlyAgg,
       trendAgg,
+      availableMonthsAgg,
     ] = await Promise.all([
       Order.aggregate([
         { $match: validOrderMatch },
@@ -303,6 +304,15 @@ class ReportService {
             count: { $sum: 1 },
             totalDiscount: { $sum: '$discountAmount' },
             totalServiceCharge: { $sum: '$serviceChargeAmount' },
+            itemsSoldTotal: {
+              $sum: {
+                $reduce: {
+                  input: { $ifNull: ['$items', []] },
+                  initialValue: 0,
+                  in: { $add: ['$$value', { $ifNull: ['$$this.quantity', 0] }] },
+                },
+              },
+            },
           },
         },
       ]),
@@ -351,19 +361,34 @@ class ReportService {
         },
         { $sort: { _id: 1 } },
       ]),
+      Order.aggregate([
+        { $match: { orderStatus: { $ne: 'refunded' } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: tz } },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
     ]);
 
     const revenue = currOrdersAgg[0]?.totalRevenue || 0;
     const ordersCount = currOrdersAgg[0]?.count || 0;
     const totalDiscount = currOrdersAgg[0]?.totalDiscount || 0;
     const totalServiceCharge = currOrdersAgg[0]?.totalServiceCharge || 0;
+    const itemsSoldTotal = currOrdersAgg[0]?.itemsSoldTotal || 0;
     const prevRevenue = prevOrdersAgg[0]?.totalRevenue || 0;
+    const prevOrdersCount = prevOrdersAgg[0]?.count || 0;
 
     const aov = ordersCount > 0 ? Math.round(revenue / ordersCount) : 0;
     const revenueGrowth =
       prevRevenue > 0 ? parseFloat((((revenue - prevRevenue) / prevRevenue) * 100).toFixed(1)) : 0;
+    const ordersGrowth =
+      prevOrdersCount > 0 ? parseFloat((((ordersCount - prevOrdersCount) / prevOrdersCount) * 100).toFixed(1)) : 0;
     const returningPercent =
       totalCustCount > 0 ? Math.round((returningCustCount / totalCustCount) * 100) : 0;
+    const avgDailyRevenue = spanDays > 0 ? Math.round(revenue / spanDays) : revenue;
+    const availableMonths = availableMonthsAgg.map((m) => m._id).filter(Boolean);
 
     const hourlyData = Array.from({ length: 24 }, (_, h) => {
       const ampm = h >= 12 ? 'PM' : 'AM';
@@ -453,11 +478,15 @@ class ReportService {
         netProfit: revenue,
         totalDiscount,
         totalServiceCharge,
+        itemsSoldTotal,
         revenueGrowth,
+        ordersGrowth,
+        avgDailyRevenue,
         returningPercent,
         loyaltyMembers: loyaltyMembersCount,
         totalCustomers: totalCustCount,
       },
+      availableMonths,
       dailyTrend,
       hourlyData: hourlyData.filter((h) => h.hourNum >= 8 && h.hourNum <= 23),
       paymentBreakdown,

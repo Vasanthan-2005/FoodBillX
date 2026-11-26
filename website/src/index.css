@@ -4,55 +4,88 @@
 
 @layer base {
   body {
-    background-color: #030408;
+    background-color: #03050a;
     color: #f8fafc;
     overflow-x: hidden;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 }
 
 .cyber-panel {
-  background: rgba(11, 13, 22, 0.78);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(9, 12, 22, 0.8);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.085);
 }
 
 .cyber-card {
+  position: relative;
   background: linear-gradient(
-    145deg,
-    rgba(20, 23, 36, 0.88) 0%,
-    rgba(9, 11, 18, 0.94) 100%
+    155deg,
+    rgba(22, 26, 42, 0.86) 0%,
+    rgba(10, 12, 21, 0.94) 58%,
+    rgba(6, 8, 15, 0.97) 100%
   );
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(255, 255, 255, 0.085);
-  box-shadow: 0 16px 40px -18px rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    0 20px 50px -22px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .cyber-card-hover {
-  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 0.35s ease,
-    box-shadow 0.35s ease;
+  transition:
+    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.32s ease,
+    box-shadow 0.32s ease;
 }
 
 .cyber-card-hover:hover {
   transform: translateY(-3px);
-  border-color: rgba(255, 109, 0, 0.42);
-  box-shadow: 0 18px 42px -14px rgba(255, 109, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 109, 0, 0.45);
+  box-shadow:
+    0 24px 50px -18px rgba(255, 109, 0, 0.22),
+    0 0 28px -8px rgba(34, 211, 238, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.cyber-hero-glow {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 109, 0, 0.14) 0%,
+    rgba(17, 22, 36, 0.94) 42%,
+    rgba(34, 211, 238, 0.09) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow:
+    0 28px 65px -24px rgba(0, 0, 0, 0.9),
+    0 0 42px -18px rgba(255, 109, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.holo-grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
 @keyframes scanBeam {
   0% {
-    transform: translateX(-100%);
+    transform: translateX(-120%);
   }
   100% {
-    transform: translateX(300%);
+    transform: translateX(340%);
   }
 }
 
 .cyber-scan-line {
-  animation: scanBeam 3.2s linear infinite;
+  animation: scanBeam 3.6s linear infinite;
 }
 
 @keyframes kenBurns {
@@ -60,7 +93,7 @@
     transform: scale(1) translate3d(0, 0, 0);
   }
   50% {
-    transform: scale(1.08) translate3d(-1.5%, -1%, 0);
+    transform: scale(1.06) translate3d(-1.5%, -1%, 0);
   }
   100% {
     transform: scale(1) translate3d(0, 0, 0);
@@ -68,20 +101,20 @@
 }
 
 .motion-kenburns {
-  animation: kenBurns 16s ease-in-out infinite;
+  animation: kenBurns 18s ease-in-out infinite;
 }
 
 @keyframes pulseRing {
   0% {
     transform: scale(0.92);
-    opacity: 0.75;
+    opacity: 0.78;
   }
   70% {
-    transform: scale(1.18);
+    transform: scale(1.24);
     opacity: 0;
   }
   100% {
-    transform: scale(1.18);
+    transform: scale(1.24);
     opacity: 0;
   }
 }
@@ -90,11 +123,25 @@
   animation: pulseRing 2.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
+@keyframes slowOrbit {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-slow-orbit {
+  animation: slowOrbit 18s linear infinite;
+}
+
 .recharts-default-tooltip {
-  background-color: #090b12 !important;
-  border: 1px solid rgba(255, 109, 0, 0.3) !important;
+  background-color: rgba(8, 11, 20, 0.96) !important;
+  border: 1px solid rgba(255, 109, 0, 0.35) !important;
   border-radius: 14px !important;
-  box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.7) !important;
+  box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(16px);
 }
 
 ::-webkit-scrollbar {

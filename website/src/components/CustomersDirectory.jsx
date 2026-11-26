@@ -19,18 +19,18 @@ export const CustomersDirectory = () => {
   const total = data?.total || 0;
 
   return (
-    <section className="max-w-7xl mx-auto px-4 md:px-8 mb-10">
+    <section className="mb-10">
       <div className="cyber-card p-6 rounded-3xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-cyan-400" />
               <h2 className="font-display text-lg font-bold text-white tracking-tight">
-                Customer & Loyalty Matrix ({formatNumber(total)})
+                Customers & Loyalty Cards ({formatNumber(total)})
               </h2>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Synced guest profiles, visit milestones & loyalty card numbers
+              Saved customer profiles, total visits, spend history, and reward points
             </p>
           </div>
 
@@ -38,7 +38,7 @@ export const CustomersDirectory = () => {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search name, phone or loyalty card..."
+              placeholder="Search name, phone or card #..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -73,9 +73,9 @@ export const CustomersDirectory = () => {
                     </div>
                     <div className="min-w-0">
                       <h4 className="text-sm font-bold text-white truncate">{c.name}</h4>
-                      <p className="text-xs text-slate-400 flex items-center gap-1">
+                      <p className="text-xs text-slate-400 flex items-center gap-1 tabular-nums">
                         <Phone className="w-3 h-3" />
-                        <span>{c.phone}</span>
+                        <span>{c.phone || 'No phone'}</span>
                       </p>
                     </div>
                   </div>
@@ -87,7 +87,7 @@ export const CustomersDirectory = () => {
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-center">
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-center tabular-nums">
                   <div>
                     <span className="text-[10px] text-slate-400 block">Visits</span>
                     <span className="text-xs font-extrabold text-white">
@@ -95,7 +95,7 @@ export const CustomersDirectory = () => {
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Spent</span>
+                    <span className="text-[10px] text-slate-400 block">Total Spent</span>
                     <span className="text-xs font-extrabold text-emerald-400">
                       {formatCurrency(c.totalSpent || 0)}
                     </span>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, Receipt, Eye, Trash2 } from 'lucide-react';
+import { Search, Receipt, Eye, Trash2, AlertTriangle } from 'lucide-react';
 import { reportsService } from '../services/reportsService';
 import { formatCurrency, formatDate, formatNumber } from '../utils/formatters';
 
@@ -9,6 +9,7 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('ALL');
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [confirmDeleteOrder, setConfirmDeleteOrder] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
 
   const shopName = settings?.businessName || 'HMB Bills';
@@ -30,6 +31,7 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
     mutationFn: (orderId) => reportsService.deleteOrder(orderId),
     onSuccess: () => {
       setSelectedOrder(null);
+      setConfirmDeleteOrder(null);
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
       queryClient.invalidateQueries({ queryKey: ['customers'] });
@@ -41,14 +43,6 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
   const totalPages = data?.totalPages || 1;
   const totalOrders = data?.total ?? orders.length;
 
-  const handleDeleteOrder = (order) => {
-    const id = order._id || order.id;
-    if (!id) return;
-    if (window.confirm(`Delete bill ${order.orderNumber} permanently and recalculate customer totals?`)) {
-      deleteMutation.mutate(id);
-    }
-  };
-
   return (
     <div className="cyber-card p-6 rounded-3xl mb-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -56,11 +50,11 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
           <div className="flex items-center gap-2">
             <Receipt className="w-5 h-5 text-cyan-400" />
             <h2 className="font-display text-lg font-bold text-white tracking-tight">
-              Orders Terminal ({formatNumber(totalOrders)})
+              Recent & Past Orders ({formatNumber(totalOrders)})
             </h2>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Synced itemized bills with cloud deletion & customer total recalculation
+            Click any bill to inspect itemized details, or delete an order to update totals
           </p>
         </div>
 
@@ -107,9 +101,9 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
             <tr>
               <th className="py-3.5 px-4">Bill No</th>
               <th className="py-3.5 px-4">Customer</th>
-              <th className="py-3.5 px-4">Items</th>
+              <th className="py-3.5 px-4">Items Ordered</th>
               <th className="py-3.5 px-4">Payment</th>
-              <th className="py-3.5 px-4">Grand Total</th>
+              <th className="py-3.5 px-4">Bill Amount</th>
               <th className="py-3.5 px-4">Status</th>
               <th className="py-3.5 px-4">Date & Time</th>
               <th className="py-3.5 px-4 text-center">Actions</th>
@@ -128,9 +122,10 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
                 return (
                   <tr
                     key={order._id || order.id || order.orderNumber}
-                    className="hover:bg-white/5 transition-colors"
+                    onClick={() => setSelectedOrder(order)}
+                    className="hover:bg-white/5 transition-colors cursor-pointer"
                   >
-                    <td className="py-3.5 px-4 font-black text-[#FF8F00]">
+                    <td className="py-3.5 px-4 font-black text-[#FF8F00] tabular-nums">
                       {order.orderNumber}
                     </td>
                     <td className="py-3.5 px-4 font-medium text-white">
@@ -146,7 +141,7 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
                         {order.paymentMethod}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 font-black text-white">
+                    <td className="py-3.5 px-4 font-black text-white tabular-nums">
                       {formatCurrency(order.grandTotal)}
                     </td>
                     <td className="py-3.5 px-4">
@@ -160,8 +155,13 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
                         {status}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-400">{formatDate(order.createdAt)}</td>
-                    <td className="py-3.5 px-4 text-center">
+                    <td className="py-3.5 px-4 text-slate-400 tabular-nums">
+                      {formatDate(order.createdAt)}
+                    </td>
+                    <td
+                      className="py-3.5 px-4 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           type="button"
@@ -174,7 +174,7 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
                         {order._id && (
                           <button
                             type="button"
-                            onClick={() => handleDeleteOrder(order)}
+                            onClick={() => setConfirmDeleteOrder(order)}
                             disabled={deleteMutation.isPending}
                             className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white transition-colors"
                             title="Delete Order"
@@ -266,19 +266,19 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
 
             <div className="border-t border-b border-white/10 py-3 space-y-2 text-xs">
               <span className="font-mono font-bold text-slate-400 block uppercase tracking-wider text-[10px]">
-                Items Billed
+                Items Ordered
               </span>
               {(selectedOrder.items || []).map((item, idx) => (
                 <div key={idx} className="flex justify-between items-center text-white">
                   <span>
                     {item.name} × {item.quantity}
                   </span>
-                  <span className="font-bold">{formatCurrency(item.subtotal)}</span>
+                  <span className="font-bold tabular-nums">{formatCurrency(item.subtotal)}</span>
                 </div>
               ))}
             </div>
 
-            <div className="space-y-1.5 text-xs">
+            <div className="space-y-1.5 text-xs tabular-nums">
               <div className="flex justify-between text-slate-400">
                 <span>Subtotal:</span>
                 <span>{formatCurrency(selectedOrder.subtotal)}</span>
@@ -307,7 +307,7 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
               {selectedOrder._id && (
                 <button
                   type="button"
-                  onClick={() => handleDeleteOrder(selectedOrder)}
+                  onClick={() => setConfirmDeleteOrder(selectedOrder)}
                   disabled={deleteMutation.isPending}
                   className="px-4 py-2.5 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5"
                 >
@@ -321,6 +321,45 @@ export const RecentOrdersTable = ({ filterParams = {}, settings = {}, fallbackOr
                 className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs"
               >
                 Close Receipt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clean In-UI Delete Confirmation Modal */}
+      {confirmDeleteOrder && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+          <div className="cyber-card w-full max-w-sm p-6 rounded-3xl border border-rose-500/35 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-display font-bold text-white text-base">
+                  Delete Bill {confirmDeleteOrder.orderNumber}?
+                </h4>
+                <p className="text-xs text-slate-400">
+                  This removes the order permanently and updates customer visit & spend totals.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteOrder(null)}
+                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(confirmDeleteOrder._id || confirmDeleteOrder.id)}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? 'Deleting...' : 'Delete Permanently'}
               </button>
             </div>
           </div>

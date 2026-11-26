@@ -3,25 +3,52 @@ import 'package:intl/intl.dart';
 
 import '../constants/app_colors.dart';
 
+import '../storage/local_database.dart';
+
 /// Opens a dedicated modal with separate **From Date** and **To Date** pickers.
 Future<DateTimeRange?> showCustomDateRangeModal(
   BuildContext context, {
   DateTime? initialStart,
   DateTime? initialEnd,
   String title = 'Select Date Range',
+  bool includeOrders = true,
+  bool includeExpenses = true,
+  bool excludeRefundedOrders = true,
+  AvailableDataDates? availableDates,
 }) async {
+  final resolvedDates = availableDates ??
+      await LocalDatabase.instance.getAvailableDataDates(
+        includeOrders: includeOrders,
+        includeExpenses: includeExpenses,
+        excludeRefundedOrders: excludeRefundedOrders,
+      );
+  if (!context.mounted) return null;
+
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
 
-  DateTime fromDate = initialStart != null
-      ? DateTime(initialStart.year, initialStart.month, initialStart.day)
-      : today.subtract(const Duration(days: 6));
-  if (fromDate.isAfter(today)) fromDate = today;
-
   DateTime toDate = initialEnd != null
       ? DateTime(initialEnd.year, initialEnd.month, initialEnd.day)
-      : today;
+      : (resolvedDates.isNotEmpty && !resolvedDates.hasMonthForDate(today)
+          ? (resolvedDates.latestDate ?? today)
+          : today);
   if (toDate.isAfter(today)) toDate = today;
+
+  final toBounds = resolvedDates.buildPickerConstraints(
+    candidateInitialDate: toDate,
+  );
+  toDate = toBounds.initialDate;
+
+  DateTime fromDate = initialStart != null
+      ? DateTime(initialStart.year, initialStart.month, initialStart.day)
+      : toDate.subtract(const Duration(days: 6));
+  if (fromDate.isAfter(toDate)) fromDate = toDate;
+
+  final fromBounds = resolvedDates.buildPickerConstraints(
+    candidateInitialDate: fromDate,
+    maxLastDate: toDate,
+  );
+  fromDate = fromBounds.initialDate;
   if (toDate.isBefore(fromDate)) toDate = fromDate;
 
   return showDialog<DateTimeRange>(
@@ -75,6 +102,10 @@ Future<DateTimeRange?> showCustomDateRangeModal(
                   InlineFromToDatePickers(
                     fromDate: fromDate,
                     toDate: toDate,
+                    availableDates: resolvedDates,
+                    includeOrders: includeOrders,
+                    includeExpenses: includeExpenses,
+                    excludeRefundedOrders: excludeRefundedOrders,
                     onFromChanged: (picked) {
                       setDialogState(() {
                         fromDate = DateTime(picked.year, picked.month, picked.day);
@@ -182,11 +213,16 @@ Future<DateTimeRange?> showCustomDateRangeModal(
 }
 
 /// Dual **From Date** and **To Date** picker widget reusable inside modals and dialogs.
-class InlineFromToDatePickers extends StatelessWidget {
+/// Automatically dims and disables calendar months that have no recorded data.
+class InlineFromToDatePickers extends StatefulWidget {
   final DateTime fromDate;
   final DateTime toDate;
   final ValueChanged<DateTime> onFromChanged;
   final ValueChanged<DateTime> onToChanged;
+  final AvailableDataDates? availableDates;
+  final bool includeOrders;
+  final bool includeExpenses;
+  final bool excludeRefundedOrders;
 
   const InlineFromToDatePickers({
     super.key,
@@ -194,17 +230,102 @@ class InlineFromToDatePickers extends StatelessWidget {
     required this.toDate,
     required this.onFromChanged,
     required this.onToChanged,
+    this.availableDates,
+    this.includeOrders = true,
+    this.includeExpenses = true,
+    this.excludeRefundedOrders = true,
   });
+
+  @override
+  State<InlineFromToDatePickers> createState() =>
+      _InlineFromToDatePickersState();
+}
+
+class _InlineFromToDatePickersState extends State<InlineFromToDatePickers> {
+  AvailableDataDates? _loadedDates;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadedDates = widget.availableDates;
+    if (_loadedDates == null) {
+      _fetchAvailableDates();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant InlineFromToDatePickers oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.availableDates != null) {
+      _loadedDates = widget.availableDates;
+    } else if (oldWidget.includeOrders != widget.includeOrders ||
+        oldWidget.includeExpenses != widget.includeExpenses ||
+        oldWidget.excludeRefundedOrders != widget.excludeRefundedOrders ||
+        oldWidget.availableDates != widget.availableDates) {
+      _fetchAvailableDates();
+    }
+  }
+
+  Future<void> _fetchAvailableDates() async {
+    final dates = await LocalDatabase.instance.getAvailableDataDates(
+      includeOrders: widget.includeOrders,
+      includeExpenses: widget.includeExpenses,
+      excludeRefundedOrders: widget.excludeRefundedOrders,
+    );
+    if (!mounted) return;
+    setState(() => _loadedDates = dates);
+
+    // If current range sits in empty months while historical data exists,
+    // snap the displayed range to the latest month containing data.
+    if (dates.isNotEmpty &&
+        (!dates.hasMonthForDate(widget.fromDate) ||
+            !dates.hasMonthForDate(widget.toDate))) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final toBounds = dates.buildPickerConstraints(
+          candidateInitialDate: widget.toDate,
+        );
+        final snappedTo = toBounds.initialDate;
+        final fromBounds = dates.buildPickerConstraints(
+          candidateInitialDate: widget.fromDate.isAfter(snappedTo)
+              ? snappedTo.subtract(const Duration(days: 6))
+              : widget.fromDate,
+          maxLastDate: snappedTo,
+        );
+        final snappedFrom = fromBounds.initialDate;
+        if (snappedFrom != widget.fromDate) {
+          widget.onFromChanged(snappedFrom);
+        }
+        if (snappedTo != widget.toDate) {
+          widget.onToChanged(snappedTo);
+        }
+      });
+    }
+  }
+
+  Future<AvailableDataDates> _ensureDates() async {
+    if (widget.availableDates != null) return widget.availableDates!;
+    if (_loadedDates != null) return _loadedDates!;
+    final dates = await LocalDatabase.instance.getAvailableDataDates(
+      includeOrders: widget.includeOrders,
+      includeExpenses: widget.includeExpenses,
+      excludeRefundedOrders: widget.excludeRefundedOrders,
+    );
+    if (mounted) {
+      setState(() => _loadedDates = dates);
+    }
+    return dates;
+  }
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final safeFrom = fromDate.isAfter(today) ? today : fromDate;
-    final safeTo = toDate.isBefore(safeFrom)
+    final safeFrom = widget.fromDate.isAfter(today) ? today : widget.fromDate;
+    final safeTo = widget.toDate.isBefore(safeFrom)
         ? safeFrom
-        : (toDate.isAfter(today) ? today : toDate);
+        : (widget.toDate.isAfter(today) ? today : widget.toDate);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -215,15 +336,21 @@ class InlineFromToDatePickers extends StatelessWidget {
           icon: Icons.login_rounded,
           isDark: isDark,
           onTap: () async {
+            final dates = await _ensureDates();
+            if (!context.mounted) return;
+            final c = dates.buildPickerConstraints(
+              candidateInitialDate: safeFrom,
+            );
             final picked = await showDatePicker(
               context: context,
-              initialDate: safeFrom,
-              firstDate: DateTime(2020),
-              lastDate: today,
+              initialDate: c.initialDate,
+              firstDate: c.firstDate,
+              lastDate: c.lastDate,
+              selectableDayPredicate: c.selectableDayPredicate,
               helpText: 'Select From Date',
             );
             if (picked != null) {
-              onFromChanged(DateTime(picked.year, picked.month, picked.day));
+              widget.onFromChanged(DateTime(picked.year, picked.month, picked.day));
             }
           },
         ),
@@ -234,15 +361,22 @@ class InlineFromToDatePickers extends StatelessWidget {
           icon: Icons.logout_rounded,
           isDark: isDark,
           onTap: () async {
+            final dates = await _ensureDates();
+            if (!context.mounted) return;
+            final c = dates.buildPickerConstraints(
+              candidateInitialDate: safeTo,
+              minFirstDate: safeFrom,
+            );
             final picked = await showDatePicker(
               context: context,
-              initialDate: safeTo,
-              firstDate: safeFrom,
-              lastDate: today,
+              initialDate: c.initialDate,
+              firstDate: c.firstDate,
+              lastDate: c.lastDate,
+              selectableDayPredicate: c.selectableDayPredicate,
               helpText: 'Select To Date',
             );
             if (picked != null) {
-              onToChanged(DateTime(picked.year, picked.month, picked.day));
+              widget.onToChanged(DateTime(picked.year, picked.month, picked.day));
             }
           },
         ),

@@ -12,55 +12,57 @@ export const CustomerInsights = ({ customerInsights = {} }) => {
   } = customerInsights;
 
   return (
-    <div className="cyber-card cyber-card-hover p-6 rounded-3xl mb-8">
-      <div className="flex items-center justify-between gap-2 mb-6">
+    <div className="cyber-card cyber-card-hover p-6 rounded-3xl h-full flex flex-col">
+      <div className="flex items-center justify-between gap-2 mb-5">
         <div>
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5 text-cyan-400" />
-            <h2 className="font-display text-lg font-bold text-white tracking-tight">
-              Customer Loyalty Intelligence
-            </h2>
+            <h3 className="font-display text-lg font-bold text-white tracking-tight">
+              Customer Loyalty Summary
+            </h3>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Retention velocity, VIP guests & repeat visit milestones
+            First-time vs. returning guests and top regular customers
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="cyber-panel p-4 rounded-2xl border border-white/10 flex items-center justify-between">
-          <div className="space-y-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 my-auto">
+        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between gap-2">
+          <div className="space-y-1 min-w-0">
             <span className="text-xs font-semibold text-slate-400 block">First-Time Guests</span>
-            <span className="text-2xl font-black text-white">{formatNumber(newCustomers)}</span>
-            <span className="text-[10px] text-slate-400 block">Single-visit customers</span>
+            <span className="text-2xl font-black text-white tabular-nums">
+              {formatNumber(newCustomers)}
+            </span>
+            <span className="text-[10px] text-slate-400 block">1 visit recorded</span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0">
             <UserPlus className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="cyber-panel p-4 rounded-2xl border border-white/10 flex items-center justify-between">
-          <div className="space-y-1">
+        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between gap-2">
+          <div className="space-y-1 min-w-0">
             <span className="text-xs font-semibold text-slate-400 block">Repeat Guests</span>
-            <span className="text-2xl font-black text-emerald-400">
+            <span className="text-2xl font-black text-emerald-400 tabular-nums">
               {formatNumber(returningCustomers)}
             </span>
             <span className="text-[10px] text-emerald-400 font-bold block">
-              {returningPercent}% retention rate
+              {returningPercent}% return rate
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
             <RefreshCcw className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="cyber-panel p-4 rounded-2xl border border-white/10 flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between gap-2">
           <div className="space-y-1 min-w-0">
-            <span className="text-xs font-semibold text-slate-400 block">Top Spender</span>
-            <span className="text-sm font-bold text-white block truncate max-w-[140px]">
-              {highestSpender?.name || 'Walk-in Guest'}
+            <span className="text-xs font-semibold text-slate-400 block">Highest Spender</span>
+            <span className="text-sm font-bold text-white block truncate">
+              {highestSpender?.name || 'No customer yet'}
             </span>
-            <span className="text-sm font-black text-amber-400 block">
+            <span className="text-sm font-black text-amber-400 tabular-nums block">
               {formatCurrency(highestSpender?.amount || 0)}
             </span>
           </div>
@@ -69,13 +71,13 @@ export const CustomerInsights = ({ customerInsights = {} }) => {
           </div>
         </div>
 
-        <div className="cyber-panel p-4 rounded-2xl border border-white/10 flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between gap-2">
           <div className="space-y-1 min-w-0">
-            <span className="text-xs font-semibold text-slate-400 block">Most Frequent</span>
-            <span className="text-sm font-bold text-white block truncate max-w-[140px]">
-              {mostFrequent?.name || 'Regular Guest'}
+            <span className="text-xs font-semibold text-slate-400 block">Most Frequent Guest</span>
+            <span className="text-sm font-bold text-white block truncate">
+              {mostFrequent?.name || 'No customer yet'}
             </span>
-            <span className="text-sm font-black text-purple-400 block">
+            <span className="text-sm font-black text-purple-400 tabular-nums block">
               {formatNumber(mostFrequent?.visits || 0)} Visits
             </span>
           </div>

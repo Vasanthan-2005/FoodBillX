@@ -1031,6 +1031,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       InlineFromToDatePickers(
                         fromDate: customFromDate,
                         toDate: customToDate,
+                        includeOrders: true,
+                        includeExpenses: selectedCategory != ExportCategory.orders,
+                        excludeRefundedOrders: selectedCategory != ExportCategory.orders,
                         onFromChanged: (d) {
                           setDialogState(() {
                             customFromDate = d;

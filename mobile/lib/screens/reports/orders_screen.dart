@@ -40,6 +40,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       initialStart: ordersState.customDateRange?.start,
       initialEnd: ordersState.customDateRange?.end,
       title: 'Filter Orders Date Range',
+      includeOrders: true,
+      includeExpenses: false,
+      excludeRefundedOrders: false,
     );
 
     if (picked != null) {

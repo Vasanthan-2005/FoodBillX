@@ -16,6 +16,176 @@ import '../../models/menu_item_model.dart';
 import '../../models/order_model.dart';
 import 'sync_queue_item.dart';
 
+/// Tracks which years, months, and calendar days actually hold recorded data
+/// so date/month/year pickers can dim and disable empty periods.
+class AvailableDataDates {
+  final Set<String> months; // 'yyyy-MM'
+  final Set<String> days;   // 'yyyy-MM-dd'
+  final Set<int> years;     // e.g. 2026
+  final DateTime? earliestDate;
+  final DateTime? latestDate;
+
+  const AvailableDataDates({
+    this.months = const {},
+    this.days = const {},
+    this.years = const {},
+    this.earliestDate,
+    this.latestDate,
+  });
+
+  static const empty = AvailableDataDates();
+
+  bool get isEmpty => months.isEmpty;
+  bool get isNotEmpty => months.isNotEmpty;
+
+  static String monthKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}';
+
+  static String dayKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  bool hasMonth(int year, int month) =>
+      months.contains('$year-${month.toString().padLeft(2, '0')}');
+
+  bool hasMonthForDate(DateTime day) =>
+      months.contains(monthKey(day));
+
+  bool hasDay(DateTime day) =>
+      days.contains(dayKey(day));
+
+  /// Ascending list of month-start dates (`DateTime(y, m, 1)`) where data exists.
+  List<DateTime> get sortedMonths {
+    final parsed = <DateTime>[];
+    for (final ym in months) {
+      final parts = ym.split('-');
+      if (parts.length == 2) {
+        final y = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        if (y != null && m != null) {
+          parsed.add(DateTime(y, m, 1));
+        }
+      }
+    }
+    parsed.sort();
+    return parsed;
+  }
+
+  /// Resolves assertion-safe `firstDate`, `lastDate`, `initialDate`, and
+  /// `selectableDayPredicate` for Flutter's `showDatePicker`.
+  /// Months with no recorded data are dimmed and unclickable.
+  ({
+    DateTime firstDate,
+    DateTime lastDate,
+    DateTime initialDate,
+    bool Function(DateTime) selectableDayPredicate,
+  }) buildPickerConstraints({
+    required DateTime candidateInitialDate,
+    DateTime? minFirstDate,
+    DateTime? maxLastDate,
+  }) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final upperBound = maxLastDate == null
+        ? today
+        : (maxLastDate.isAfter(today)
+            ? today
+            : DateTime(maxLastDate.year, maxLastDate.month, maxLastDate.day));
+
+    if (months.isEmpty) {
+      var first = minFirstDate != null
+          ? DateTime(minFirstDate.year, minFirstDate.month, minFirstDate.day)
+          : today;
+      var last = upperBound;
+      if (first.isAfter(last)) first = last;
+      var init = DateTime(
+        candidateInitialDate.year,
+        candidateInitialDate.month,
+        candidateInitialDate.day,
+      );
+      if (init.isBefore(first)) init = first;
+      if (init.isAfter(last)) init = last;
+      return (
+        firstDate: first,
+        lastDate: last,
+        initialDate: init,
+        selectableDayPredicate: (d) =>
+            d.year == init.year && d.month == init.month && d.day == init.day,
+      );
+    }
+
+    final sortedM = sortedMonths;
+    final earliestMonthStart = DateTime(sortedM.first.year, sortedM.first.month, 1);
+    final latestMonthEnd = DateTime(sortedM.last.year, sortedM.last.month + 1, 0);
+
+    var first = earliestMonthStart;
+    if (minFirstDate != null) {
+      final minDay = DateTime(
+        minFirstDate.year,
+        minFirstDate.month,
+        minFirstDate.day,
+      );
+      if (minDay.isAfter(first)) first = minDay;
+    }
+
+    var last = latestMonthEnd.isAfter(upperBound) ? upperBound : latestMonthEnd;
+    if (first.isAfter(last)) {
+      first = last;
+    }
+
+    bool predicate(DateTime day) {
+      final d = DateTime(day.year, day.month, day.day);
+      if (d.isBefore(first) || d.isAfter(last)) return false;
+      return months.contains(monthKey(d));
+    }
+
+    var init = DateTime(
+      candidateInitialDate.year,
+      candidateInitialDate.month,
+      candidateInitialDate.day,
+    );
+    if (init.isBefore(first)) init = first;
+    if (init.isAfter(last)) init = last;
+
+    if (!predicate(init)) {
+      DateTime? best;
+      int bestDiff = 1 << 30;
+      for (final mStart in sortedM) {
+        final mLastDay = DateTime(mStart.year, mStart.month + 1, 0);
+        final segStart = mStart.isBefore(first) ? first : mStart;
+        final segEnd = mLastDay.isAfter(last) ? last : mLastDay;
+        if (segStart.isAfter(segEnd)) continue;
+
+        final candidate = init.isBefore(segStart)
+            ? segStart
+            : (init.isAfter(segEnd) ? segEnd : init);
+        final diff = (candidate.difference(init).inDays).abs();
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          best = candidate;
+        }
+      }
+      if (best != null) {
+        init = best;
+      } else {
+        return (
+          firstDate: first,
+          lastDate: last,
+          initialDate: init,
+          selectableDayPredicate: (d) =>
+              d.year == init.year && d.month == init.month && d.day == init.day,
+        );
+      }
+    }
+
+    return (
+      firstDate: first,
+      lastDate: last,
+      initialDate: init,
+      selectableDayPredicate: predicate,
+    );
+  }
+}
+
 class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._internal();
   LocalDatabase._internal();
@@ -2673,5 +2843,66 @@ class LocalDatabase {
       await batch.commit(noResult: true);
       return count;
     });
+  }
+
+  /// Queries SQLite for distinct years, months, and dates that contain at least
+  /// one non-deleted order and/or expense record.
+  Future<AvailableDataDates> getAvailableDataDates({
+    bool includeOrders = true,
+    bool includeExpenses = true,
+    bool excludeRefundedOrders = true,
+  }) async {
+    final db = await database;
+    final months = <String>{};
+    final days = <String>{};
+    final years = <int>{};
+    DateTime? earliest;
+    DateTime? latest;
+
+    void recordTimestamp(String? raw) {
+      if (raw == null || raw.isEmpty) return;
+      try {
+        final dt = DateTime.parse(raw).toLocal();
+        final dayOnly = DateTime(dt.year, dt.month, dt.day);
+        years.add(dt.year);
+        months.add(AvailableDataDates.monthKey(dayOnly));
+        days.add(AvailableDataDates.dayKey(dayOnly));
+        if (earliest == null || dayOnly.isBefore(earliest!)) {
+          earliest = dayOnly;
+        }
+        if (latest == null || dayOnly.isAfter(latest!)) {
+          latest = dayOnly;
+        }
+      } catch (_) {}
+    }
+
+    if (includeOrders) {
+      final orderWhere = excludeRefundedOrders
+          ? "deleted_at IS NULL AND order_status != 'refunded'"
+          : 'deleted_at IS NULL';
+      final rows = await db.rawQuery(
+        'SELECT created_at FROM orders WHERE $orderWhere GROUP BY substr(created_at, 1, 13)',
+      );
+      for (final row in rows) {
+        recordTimestamp(row['created_at'] as String?);
+      }
+    }
+
+    if (includeExpenses) {
+      final rows = await db.rawQuery(
+        'SELECT date FROM expenses WHERE deleted_at IS NULL GROUP BY substr(date, 1, 13)',
+      );
+      for (final row in rows) {
+        recordTimestamp(row['date'] as String?);
+      }
+    }
+
+    return AvailableDataDates(
+      months: months,
+      days: days,
+      years: years,
+      earliestDate: earliest,
+      latestDate: latest,
+    );
   }
 }

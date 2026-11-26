@@ -52,6 +52,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   DateTime _selectedDate = DateTime.now();
   DateTimeRange? _customRange;
   Map<String, dynamic>? _periodData;
+  AvailableDataDates _availableDates = AvailableDataDates.empty;
   bool _isLoadingPeriod = false;
   bool _showAllDishes = false;
   bool _isExporting = false;
@@ -90,15 +91,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     });
     try {
       final range = _selectedTimeframe == 'Custom' ? _effectiveCustomRange : null;
-      final data = await LocalDatabase.instance.computePeriodReports(
-        timeframe: _selectedTimeframe,
-        referenceDate: _selectedDate,
-        customStartDate: range?.start,
-        customEndDate: range?.end,
-      );
+      final results = await Future.wait([
+        LocalDatabase.instance.computePeriodReports(
+          timeframe: _selectedTimeframe,
+          referenceDate: _selectedDate,
+          customStartDate: range?.start,
+          customEndDate: range?.end,
+        ),
+        LocalDatabase.instance.getAvailableDataDates(
+          includeOrders: true,
+          includeExpenses: true,
+          excludeRefundedOrders: true,
+        ),
+      ]);
+      final data = results[0] as Map<String, dynamic>;
+      final avail = results[1] as AvailableDataDates;
       if (mounted) {
         setState(() {
           _periodData = data;
+          _availableDates = avail;
           _isLoadingPeriod = false;
         });
       }
@@ -110,47 +121,130 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  bool get _canGoNext {
+  bool get _canGoPrevious {
+    if (_selectedTimeframe == 'All Time') return false;
+    if (_availableDates.isEmpty) return false;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final earliest = _availableDates.earliestDate;
+    if (earliest == null) return false;
+
     switch (_selectedTimeframe) {
       case 'Daily':
         final selected = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-        return selected.isBefore(today);
+        return selected.isAfter(earliest);
       case 'Weekly':
         final mondaySelected = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
-        final mondayNow = now.subtract(Duration(days: now.weekday - 1));
+        final mondayEarliest = earliest.subtract(Duration(days: earliest.weekday - 1));
         return DateTime(mondaySelected.year, mondaySelected.month, mondaySelected.day)
-            .isBefore(DateTime(mondayNow.year, mondayNow.month, mondayNow.day));
+            .isAfter(DateTime(mondayEarliest.year, mondayEarliest.month, mondayEarliest.day));
       case 'Monthly':
-        return _selectedDate.year < now.year ||
-            (_selectedDate.year == now.year && _selectedDate.month < now.month);
+        final currentMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
+        return _availableDates.sortedMonths.any((m) => m.isBefore(currentMonth));
       case 'Yearly':
-        return _selectedDate.year < now.year;
+        return _availableDates.years.any((y) => y < _selectedDate.year);
+      case 'Custom':
+        final start = _effectiveCustomRange.start;
+        final clampedToday = earliest.isAfter(today) ? today : earliest;
+        return DateTime(start.year, start.month, start.day).isAfter(clampedToday);
+      default:
+        return false;
+    }
+  }
+
+  bool get _canGoNext {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final latest = _availableDates.latestDate;
+    final upperDay = latest != null && !latest.isAfter(today) ? latest : today;
+
+    switch (_selectedTimeframe) {
+      case 'Daily':
+        final selected = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+        return selected.isBefore(_availableDates.isEmpty ? today : upperDay);
+      case 'Weekly':
+        final mondaySelected = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
+        final refEnd = _availableDates.isEmpty ? now : upperDay;
+        final mondayUpper = refEnd.subtract(Duration(days: refEnd.weekday - 1));
+        return DateTime(mondaySelected.year, mondaySelected.month, mondaySelected.day)
+            .isBefore(DateTime(mondayUpper.year, mondayUpper.month, mondayUpper.day));
+      case 'Monthly':
+        final currentMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
+        final currentRealMonth = DateTime(now.year, now.month, 1);
+        if (_availableDates.isEmpty) {
+          return currentMonth.isBefore(currentRealMonth);
+        }
+        return _availableDates.sortedMonths.any(
+          (m) => m.isAfter(currentMonth) && !m.isAfter(currentRealMonth),
+        );
+      case 'Yearly':
+        if (_availableDates.isEmpty) {
+          return _selectedDate.year < now.year;
+        }
+        return _availableDates.years.any((y) => y > _selectedDate.year && y <= now.year);
       case 'Custom':
         final end = _effectiveCustomRange.end;
-        return DateTime(end.year, end.month, end.day).isBefore(today);
+        return DateTime(end.year, end.month, end.day)
+            .isBefore(_availableDates.isEmpty ? today : upperDay);
       case 'All Time':
       default:
         return false;
     }
   }
 
+  bool _weekIntersectsAvailableMonth(DateTime refDate) {
+    if (_availableDates.isEmpty) return true;
+    final mon = DateTime(refDate.year, refDate.month, refDate.day)
+        .subtract(Duration(days: refDate.weekday - 1));
+    final sun = mon.add(const Duration(days: 6));
+    return _availableDates.hasMonthForDate(mon) || _availableDates.hasMonthForDate(sun);
+  }
+
   void _onPreviousPeriod() {
-    if (_selectedTimeframe == 'All Time') return;
+    if (!_canGoPrevious || _selectedTimeframe == 'All Time') return;
+    final sortedMonths = _availableDates.sortedMonths;
+
     setState(() {
       switch (_selectedTimeframe) {
         case 'Daily':
-          _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+          final candidate = _selectedDate.subtract(const Duration(days: 1));
+          if (_availableDates.isNotEmpty && !_availableDates.hasMonthForDate(candidate)) {
+            final candMonth = DateTime(candidate.year, candidate.month, 1);
+            final prevMonths = sortedMonths.where((m) => m.isBefore(candMonth)).toList();
+            if (prevMonths.isNotEmpty) {
+              final targetM = prevMonths.last;
+              _selectedDate = DateTime(targetM.year, targetM.month + 1, 0);
+            }
+          } else {
+            _selectedDate = candidate;
+          }
           break;
         case 'Weekly':
-          _selectedDate = _selectedDate.subtract(const Duration(days: 7));
+          final candidate = _selectedDate.subtract(const Duration(days: 7));
+          if (_availableDates.isNotEmpty && !_weekIntersectsAvailableMonth(candidate)) {
+            final mondaySelected = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
+            final monMonth = DateTime(mondaySelected.year, mondaySelected.month, 1);
+            final prevMonths = sortedMonths.where((m) => m.isBefore(monMonth)).toList();
+            if (prevMonths.isNotEmpty) {
+              final targetM = prevMonths.last;
+              _selectedDate = DateTime(targetM.year, targetM.month + 1, 0);
+            }
+          } else {
+            _selectedDate = candidate;
+          }
           break;
         case 'Monthly':
-          _selectedDate = DateTime(_selectedDate.year, _selectedDate.month - 1, 1);
+          final currentMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
+          final prevMonths = sortedMonths.where((m) => m.isBefore(currentMonth)).toList();
+          if (prevMonths.isNotEmpty) {
+            _selectedDate = prevMonths.last;
+          }
           break;
         case 'Yearly':
-          _selectedDate = DateTime(_selectedDate.year - 1, 1, 1);
+          final prevYears = _availableDates.years.where((y) => y < _selectedDate.year).toList()..sort();
+          if (prevYears.isNotEmpty) {
+            _selectedDate = DateTime(prevYears.last, 1, 1);
+          }
           break;
         case 'Custom':
           final current = _effectiveCustomRange;
@@ -169,20 +263,60 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (!_canGoNext || _selectedTimeframe == 'All Time') return;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final sortedMonths = _availableDates.sortedMonths;
+
     setState(() {
       switch (_selectedTimeframe) {
         case 'Daily':
           final candidate = _selectedDate.add(const Duration(days: 1));
-          _selectedDate = candidate.isAfter(today) ? today : candidate;
+          final clamped = candidate.isAfter(today) ? today : candidate;
+          if (_availableDates.isNotEmpty && !_availableDates.hasMonthForDate(clamped)) {
+            final candMonth = DateTime(clamped.year, clamped.month, 1);
+            final nextMonths = sortedMonths.where((m) => m.isAfter(candMonth)).toList();
+            if (nextMonths.isNotEmpty) {
+              _selectedDate = nextMonths.first;
+            }
+          } else {
+            _selectedDate = clamped;
+          }
           break;
         case 'Weekly':
-          _selectedDate = _selectedDate.add(const Duration(days: 7));
+          final candidate = _selectedDate.add(const Duration(days: 7));
+          if (_availableDates.isNotEmpty && !_weekIntersectsAvailableMonth(candidate)) {
+            final sundaySelected = _selectedDate
+                .subtract(Duration(days: _selectedDate.weekday - 1))
+                .add(const Duration(days: 6));
+            final sunMonth = DateTime(sundaySelected.year, sundaySelected.month, 1);
+            final nextMonths = sortedMonths.where((m) => m.isAfter(sunMonth)).toList();
+            if (nextMonths.isNotEmpty) {
+              _selectedDate = nextMonths.first;
+            }
+          } else {
+            _selectedDate = candidate;
+          }
           break;
         case 'Monthly':
-          _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + 1, 1);
+          final currentMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
+          final currentRealMonth = DateTime(now.year, now.month, 1);
+          final nextMonths = sortedMonths
+              .where((m) => m.isAfter(currentMonth) && !m.isAfter(currentRealMonth))
+              .toList();
+          if (nextMonths.isNotEmpty) {
+            _selectedDate = nextMonths.first;
+          } else if (currentMonth.isBefore(currentRealMonth)) {
+            _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + 1, 1);
+          }
           break;
         case 'Yearly':
-          _selectedDate = DateTime(_selectedDate.year + 1, 1, 1);
+          final nextYears = _availableDates.years
+              .where((y) => y > _selectedDate.year && y <= now.year)
+              .toList()
+            ..sort();
+          if (nextYears.isNotEmpty) {
+            _selectedDate = DateTime(nextYears.first, 1, 1);
+          } else if (_selectedDate.year < now.year) {
+            _selectedDate = DateTime(_selectedDate.year + 1, 1, 1);
+          }
           break;
         case 'Custom':
           final current = _effectiveCustomRange;
@@ -221,14 +355,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  Future<AvailableDataDates> _refreshAvailableDates() async {
+    final avail = await LocalDatabase.instance.getAvailableDataDates(
+      includeOrders: true,
+      includeExpenses: true,
+      excludeRefundedOrders: true,
+    );
+    if (mounted) {
+      setState(() => _availableDates = avail);
+    }
+    return avail;
+  }
+
   Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final initial = _selectedDate.isAfter(now) ? now : _selectedDate;
+    final available = await _refreshAvailableDates();
+    if (!mounted) return;
+    final c = available.buildPickerConstraints(
+      candidateInitialDate: _selectedDate,
+    );
     final picked = await showDatePicker(
       context: context,
-      initialDate: initial,
-      firstDate: DateTime(2020),
-      lastDate: now,
+      initialDate: c.initialDate,
+      firstDate: c.firstDate,
+      lastDate: c.lastDate,
+      selectableDayPredicate: c.selectableDayPredicate,
       helpText: _selectedTimeframe == 'Weekly'
           ? 'Pick Any Date in Target Week'
           : 'Select Report Date',
@@ -240,12 +390,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _pickCustomRange() async {
+    final available = await _refreshAvailableDates();
+    if (!mounted) return;
     final current = _effectiveCustomRange;
     final picked = await showCustomDateRangeModal(
       context,
       initialStart: current.start,
       initialEnd: current.end,
       title: 'Select Report Date Range',
+      includeOrders: true,
+      includeExpenses: true,
+      excludeRefundedOrders: true,
+      availableDates: available,
     );
     if (picked != null) {
       setState(() {
@@ -257,13 +413,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _pickMonthYear() async {
+    final available = await _refreshAvailableDates();
+    if (!mounted) return;
     final now = DateTime.now();
-    int dialogYear = _selectedDate.year;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final yearsWithData = available.years.where((y) => y <= now.year).toList()..sort();
+    int dialogYear = available.isEmpty
+        ? now.year
+        : (yearsWithData.contains(_selectedDate.year)
+            ? _selectedDate.year
+            : (yearsWithData.isNotEmpty ? yearsWithData.last : now.year));
+
     final selected = await showDialog<DateTime>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
+            final prevYears = yearsWithData.where((y) => y < dialogYear).toList();
+            final nextYears = yearsWithData.where((y) => y > dialogYear).toList();
+            final canPrevYear = prevYears.isNotEmpty;
+            final canNextYear = dialogYear < now.year && nextYears.isNotEmpty;
+
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: Row(
@@ -271,8 +441,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.chevron_left_rounded),
-                    onPressed: dialogYear > 2020
-                        ? () => setDialogState(() => dialogYear--)
+                    onPressed: canPrevYear
+                        ? () => setDialogState(() => dialogYear = prevYears.last)
                         : null,
                   ),
                   Text(
@@ -281,8 +451,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.chevron_right_rounded),
-                    onPressed: dialogYear < now.year
-                        ? () => setDialogState(() => dialogYear++)
+                    onPressed: canNextYear
+                        ? () => setDialogState(() => dialogYear = nextYears.first)
                         : null,
                   ),
                 ],
@@ -303,13 +473,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     final month = idx + 1;
                     final isFuture = dialogYear > now.year ||
                         (dialogYear == now.year && month > now.month);
-                    final isCurrentSelected =
-                        _selectedDate.year == dialogYear && _selectedDate.month == month;
+                    final hasData = available.isEmpty
+                        ? (dialogYear == now.year && month == now.month)
+                        : available.hasMonth(dialogYear, month);
+                    final isDisabled = isFuture || !hasData;
+                    final isCurrentSelected = !isDisabled &&
+                        _selectedDate.year == dialogYear &&
+                        _selectedDate.month == month;
                     final label = DateFormat('MMM').format(DateTime(dialogYear, month, 1));
 
                     return InkWell(
                       borderRadius: BorderRadius.circular(10),
-                      onTap: isFuture
+                      onTap: isDisabled
                           ? null
                           : () => Navigator.pop(ctx, DateTime(dialogYear, month, 1)),
                       child: Container(
@@ -317,16 +492,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         decoration: BoxDecoration(
                           color: isCurrentSelected
                               ? AppColors.primary
-                              : (isFuture
+                              : (isDisabled
                                   ? Colors.transparent
-                                  : AppColors.primary.withAlpha(18)),
+                                  : AppColors.primary.withAlpha(20)),
                           borderRadius: BorderRadius.circular(10),
                           border: isCurrentSelected
                               ? null
                               : Border.all(
-                                  color: isFuture
-                                      ? Colors.grey.withAlpha(40)
-                                      : AppColors.primary.withAlpha(50),
+                                  color: isDisabled
+                                      ? (isDark ? Colors.white12 : Colors.grey.withAlpha(38))
+                                      : AppColors.primary.withAlpha(65),
                                 ),
                         ),
                         child: Text(
@@ -335,7 +510,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             fontWeight: isCurrentSelected ? FontWeight.bold : FontWeight.w600,
                             color: isCurrentSelected
                                 ? Colors.white
-                                : (isFuture ? Colors.grey : null),
+                                : (isDisabled
+                                    ? (isDark ? Colors.white24 : Colors.grey.shade400)
+                                    : null),
                           ),
                         ),
                       ),
@@ -362,9 +539,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _pickYear() async {
+    final available = await _refreshAvailableDates();
+    if (!mounted) return;
     final currentYear = DateTime.now().year;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final earliestYear = available.earliestDate?.year ?? currentYear;
+    final minYear = earliestYear < currentYear ? earliestYear : currentYear;
     final years = List<int>.generate(
-      (currentYear - 2020 + 1).clamp(1, 30),
+      (currentYear - minYear + 1).clamp(1, 30),
       (i) => currentYear - i,
     );
     final selected = await showDialog<int>(
@@ -379,16 +561,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             runSpacing: 8,
             alignment: WrapAlignment.center,
             children: years.map((yr) {
-              final isSelected = _selectedDate.year == yr;
+              final hasData = available.isEmpty
+                  ? (yr == currentYear)
+                  : available.years.contains(yr);
+              final isSelected = hasData && _selectedDate.year == yr;
               return ChoiceChip(
                 label: Text('$yr'),
                 selected: isSelected,
                 selectedColor: AppColors.primary,
+                disabledColor: Colors.transparent,
+                side: !hasData
+                    ? BorderSide(color: isDark ? Colors.white12 : Colors.grey.withAlpha(40))
+                    : null,
                 labelStyle: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: isSelected ? Colors.white : null,
+                  color: !hasData
+                      ? (isDark ? Colors.white24 : Colors.grey.shade400)
+                      : (isSelected ? Colors.white : null),
                 ),
-                onSelected: (_) => Navigator.pop(ctx, yr),
+                onSelected: hasData ? (_) => Navigator.pop(ctx, yr) : null,
               );
             }).toList(),
           ),
@@ -575,6 +766,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildDateSlicer(BuildContext context, bool isDark) {
+    final canPrev = _canGoPrevious;
     final canNext = _canGoNext;
     final isAllTime = _selectedTimeframe == 'All Time';
     final theme = Theme.of(context);
@@ -609,11 +801,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.chevron_left_rounded, size: 28),
-                  tooltip: isAllTime ? null : 'Previous $_selectedTimeframe',
-                  color: isAllTime
+                  tooltip: (isAllTime || !canPrev) ? null : 'Previous $_selectedTimeframe',
+                  color: (isAllTime || !canPrev)
                       ? (isDark ? Colors.white24 : Colors.grey.shade300)
                       : (isDark ? Colors.white : Colors.grey.shade800),
-                  onPressed: isAllTime ? null : _onPreviousPeriod,
+                  onPressed: (isAllTime || !canPrev) ? null : _onPreviousPeriod,
                 ),
                 Expanded(
                   child: Tooltip(
@@ -1727,6 +1919,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       InlineFromToDatePickers(
                         fromDate: customFromDate,
                         toDate: customToDate,
+                        includeOrders: true,
+                        includeExpenses: selectedType != _ReportExportType.orders,
+                        excludeRefundedOrders: selectedType != _ReportExportType.orders,
                         onFromChanged: (d) {
                           setDialogState(() {
                             customFromDate = d;

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import {
   Utensils,
   RefreshCw,
   Clock,
-  Database,
   Download,
   Cloud,
   CheckCircle2,
@@ -11,16 +11,16 @@ import {
   Receipt,
   Users,
   FolderArchive,
-  Wifi,
+  Radio,
 } from 'lucide-react';
 import { reportsService } from '../services/reportsService';
 import { formatNumber } from '../utils/formatters';
 
 const NAV_TABS = [
-  { id: 'reports', label: 'Analytics Hub', icon: BarChart3 },
-  { id: 'orders', label: 'Orders Terminal', icon: Receipt },
-  { id: 'customers', label: 'Loyalty Matrix', icon: Users },
-  { id: 'export', label: 'Export Vault', icon: FolderArchive },
+  { id: 'reports', label: 'Dashboard', icon: BarChart3 },
+  { id: 'orders', label: 'Orders', icon: Receipt },
+  { id: 'customers', label: 'Customers', icon: Users },
+  { id: 'export', label: 'Export & Backup', icon: FolderArchive },
 ];
 
 export const Header = ({
@@ -44,10 +44,10 @@ export const Header = ({
       setExportMessage(null);
       const data = await reportsService.exportMongoDBBackup();
       const total = data?.summary?.totalRecords ?? 'all';
-      setExportMessage(`Exported ${formatNumber(total)} MongoDB cloud records.`);
+      setExportMessage(`Downloaded full cloud backup (${formatNumber(total)} records).`);
       setTimeout(() => setExportMessage(null), 5000);
     } catch (err) {
-      setExportMessage(`Export failed: ${err.message}`);
+      setExportMessage(`Backup failed: ${err.message}`);
       setTimeout(() => setExportMessage(null), 5000);
     } finally {
       setIsExporting(false);
@@ -55,7 +55,7 @@ export const Header = ({
   };
 
   const formatLastSync = (isoString) => {
-    if (!isoString) return 'Pending initial sync';
+    if (!isoString) return 'Waiting for sync';
     const date = new Date(isoString);
     if (Number.isNaN(date.getTime())) return 'Recently';
     return date.toLocaleString('en-IN', {
@@ -67,72 +67,75 @@ export const Header = ({
     });
   };
 
-  const dbStatus = syncStatus?.databaseStatus || 'Connected';
+  const dbConnected = (syncStatus?.databaseStatus || 'Connected').toLowerCase() === 'connected';
   const totalCloudRecords = syncStatus?.totalRecords ?? 0;
   const lastSynced = syncStatus?.lastSyncedAt;
 
   return (
-    <header className="sticky top-0 z-40 cyber-panel border-b border-white/10 px-4 md:px-8 py-3.5 mb-6 shadow-glass no-print">
-      <div className="max-w-7xl mx-auto flex flex-col gap-3.5">
+    <header className="sticky top-0 z-40 cyber-panel border-b border-white/10 px-4 md:px-8 py-3 mb-6 shadow-glass no-print">
+      <div className="max-w-7xl mx-auto flex flex-col gap-3">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-          {/* Brand Logo & Shop Name */}
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#FF6D00] to-[#FFB300] flex items-center justify-center shadow-glow">
-              <Utensils className="w-6 h-6 text-white" />
+          {/* Brand Crest & Friendly Subtitle */}
+          <div className="flex items-center gap-3.5">
+            <div className="relative">
+              <div className="absolute -inset-1 rounded-2xl border border-[#FF6D00]/40 border-dashed animate-slow-orbit pointer-events-none" />
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#FF6D00] via-[#FF8F00] to-[#FFB300] flex items-center justify-center shadow-glow relative">
+                <Utensils className="w-5 h-5 text-white" />
+              </div>
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="font-display text-xl font-extrabold text-white tracking-tight">
                   {shopName}
                 </h1>
-                <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-[#FF6D00]/20 text-[#FF8F00] border border-[#FF6D00]/40 uppercase tracking-wider">
-                  Command OS
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-mono font-bold rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 uppercase tracking-wider">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      dbConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                    }`}
+                  />
+                  {socketConnected ? 'Live Cloud' : 'Cloud Connected'}
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium mt-0.5">
-                Executive Cloud Telemetry • Real-Time POS Mirror
+                Live Restaurant Sales, Orders & Customer Analytics
               </p>
             </div>
           </div>
 
-          {/* Telemetry Pills & Actions */}
+          {/* Clear Status Chips & Actions */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-emerald-500/30 text-emerald-400 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <Database className="w-3.5 h-3.5" />
-              <span>
-                Atlas: <strong>{dbStatus}</strong>
-              </span>
-            </div>
-
             <div
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border ${
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border ${
                 socketConnected
                   ? 'border-cyan-500/35 text-cyan-300'
                   : 'border-white/10 text-slate-400'
               }`}
+              title="Real-time updates from POS devices"
             >
-              <Wifi className="w-3.5 h-3.5" />
-              <span>{socketConnected ? 'Stream Live' : 'Polling'}</span>
+              <Radio className={`w-3.5 h-3.5 ${socketConnected ? 'animate-pulse' : ''}`} />
+              <span className="font-medium">
+                {socketConnected ? 'Auto-Sync Live' : 'Auto-Updating'}
+              </span>
             </div>
 
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-300">
-              <Cloud className="w-3.5 h-3.5 text-cyan-400" />
+              <Cloud className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span>
-                Synced: <strong>{formatLastSync(lastSynced)}</strong>
+                Last Sync: <strong className="text-white">{formatLastSync(lastSynced)}</strong>
               </span>
               {totalCloudRecords > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 text-[10px] font-mono font-bold">
-                  {formatNumber(totalCloudRecords)}
+                <span className="ml-1 px-1.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 text-[10px] font-mono font-bold tabular-nums">
+                  {formatNumber(totalCloudRecords)} saved
                 </span>
               )}
             </div>
 
-            <div className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-400">
+            <div className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 tabular-nums">
               <Clock className="w-3.5 h-3.5" />
               <span>
                 {lastUpdated
-                  ? lastUpdated.toLocaleTimeString([], {
+                  ? lastUpdated.toLocaleTimeString('en-IN', {
                       hour: '2-digit',
                       minute: '2-digit',
                       second: '2-digit',
@@ -145,10 +148,11 @@ export const Header = ({
               type="button"
               onClick={handleExportBackup}
               disabled={isExporting}
-              className="px-3.5 py-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+              className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-300 font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+              title="Download full cloud data in JSON format"
             >
               <Download className={`w-3.5 h-3.5 ${isExporting ? 'animate-bounce' : ''}`} />
-              <span>{isExporting ? 'Dumping...' : 'Cloud JSON'}</span>
+              <span>{isExporting ? 'Saving...' : 'Backup JSON'}</span>
             </button>
 
             <button
@@ -158,13 +162,13 @@ export const Header = ({
               className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#FF6D00] to-[#FF9100] hover:brightness-110 text-white font-bold shadow-glow flex items-center gap-1.5 transition-all disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-              <span>{isFetching ? 'Syncing...' : 'Refresh'}</span>
+              <span>{isFetching ? 'Updating...' : 'Refresh'}</span>
             </button>
           </div>
         </div>
 
-        {/* Navigation Switcher Bar */}
-        <nav className="flex flex-wrap items-center gap-2 pt-1 border-t border-white/5">
+        {/* Navigation Switcher Bar with Animated Sliding Indicator */}
+        <nav className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-white/5">
           {NAV_TABS.map((tab) => {
             const Icon = tab.icon;
             const selected = activeTab === tab.id;
@@ -173,14 +177,22 @@ export const Header = ({
                 key={tab.id}
                 type="button"
                 onClick={() => onTabChange(tab.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                  selected
-                    ? 'bg-gradient-to-r from-[#FF6D00] to-[#FF9100] text-white shadow-glow'
-                    : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
+                className={`relative px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${
+                  selected ? 'text-white' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
+                {selected && (
+                  <motion.div
+                    layoutId="headerTabPill"
+                    transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#FF6D00] to-[#FF9100] shadow-glow"
+                  />
+                )}
+                {!selected && (
+                  <div className="absolute inset-0 rounded-xl bg-white/[0.03] border border-white/[0.07]" />
+                )}
+                <Icon className="w-3.5 h-3.5 relative z-10" />
+                <span className="relative z-10">{tab.label}</span>
               </button>
             );
           })}

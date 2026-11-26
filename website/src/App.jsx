@@ -85,12 +85,57 @@ function MainDashboard() {
     socketConnected,
   } = useReportsData(filterParams);
 
+  const availableMonths = analytics?.availableMonths || [];
+
+  const availableMonthStarts = useMemo(
+    () =>
+      availableMonths
+        .map((ym) => {
+          const [y, m] = String(ym).split('-').map(Number);
+          return y && m ? new Date(y, m - 1, 1) : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => a - b),
+    [availableMonths]
+  );
+
+  const availableYears = useMemo(() => {
+    const set = new Set(availableMonthStarts.map((d) => d.getFullYear()));
+    return Array.from(set).sort((a, b) => a - b);
+  }, [availableMonthStarts]);
+
   const handlePeriodChange = (period) => {
     setCurrentPeriod(period);
     setRefDate(new Date());
   };
 
   const handleStepPeriod = (delta) => {
+    if (currentPeriod === 'monthly' && availableMonthStarts.length > 0) {
+      const currStart = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+      if (delta < 0) {
+        const prev = availableMonthStarts.filter((d) => d < currStart);
+        if (prev.length > 0) setRefDate(prev[prev.length - 1]);
+      } else {
+        const now = new Date();
+        const currRealMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const next = availableMonthStarts.filter((d) => d > currStart && d <= currRealMonth);
+        if (next.length > 0) setRefDate(next[0]);
+      }
+      return;
+    }
+
+    if (currentPeriod === 'yearly' && availableYears.length > 0) {
+      const y = refDate.getFullYear();
+      if (delta < 0) {
+        const prev = availableYears.filter((yr) => yr < y);
+        if (prev.length > 0) setRefDate(new Date(prev[prev.length - 1], 0, 1));
+      } else {
+        const next = availableYears.filter((yr) => yr > y && yr <= new Date().getFullYear());
+        if (next.length > 0) setRefDate(new Date(next[0], 0, 1));
+      }
+      return;
+    }
+
     const next = new Date(refDate);
     if (currentPeriod === 'daily') next.setDate(next.getDate() + delta);
     else if (currentPeriod === 'weekly') next.setDate(next.getDate() + delta * 7);
@@ -99,19 +144,41 @@ function MainDashboard() {
     setRefDate(next);
   };
 
+  const canStepPrev = useMemo(() => {
+    if (currentPeriod === 'allTime' || currentPeriod === 'custom') return false;
+    if (availableMonthStarts.length === 0) return true;
+    const earliest = availableMonthStarts[0];
+    if (currentPeriod === 'monthly') {
+      const currStart = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+      return availableMonthStarts.some((d) => d < currStart);
+    }
+    if (currentPeriod === 'yearly') {
+      return availableYears.some((yr) => yr < refDate.getFullYear());
+    }
+    const dayStart = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate());
+    return dayStart > earliest;
+  }, [currentPeriod, refDate, availableMonthStarts, availableYears]);
+
   const canStepNext = useMemo(() => {
     const now = new Date();
     if (currentPeriod === 'daily') return !isSameCalendarDay(refDate, now) && refDate < now;
     if (currentPeriod === 'monthly') {
-      return (
-        refDate.getFullYear() < now.getFullYear() ||
-        (refDate.getFullYear() === now.getFullYear() && refDate.getMonth() < now.getMonth())
-      );
+      const currStart = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+      const realMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      if (availableMonthStarts.length > 0) {
+        return availableMonthStarts.some((d) => d > currStart && d <= realMonth);
+      }
+      return currStart < realMonth;
     }
-    if (currentPeriod === 'yearly') return refDate.getFullYear() < now.getFullYear();
+    if (currentPeriod === 'yearly') {
+      if (availableYears.length > 0) {
+        return availableYears.some((yr) => yr > refDate.getFullYear() && yr <= now.getFullYear());
+      }
+      return refDate.getFullYear() < now.getFullYear();
+    }
     if (currentPeriod === 'weekly') return refDate < now;
     return false;
-  }, [currentPeriod, refDate]);
+  }, [currentPeriod, refDate, availableMonthStarts, availableYears]);
 
   const periodLabel = useMemo(
     () => formatSlicerLabel(currentPeriod, refDate, customRange),
@@ -133,16 +200,24 @@ function MainDashboard() {
         onTabChange={setActiveTab}
       />
 
-      <CulinaryMotionReel analytics={analytics} syncStatus={syncStatus} settings={settings} />
+      <CulinaryMotionReel
+        analytics={analytics}
+        settings={settings}
+        periodLabel={periodLabel}
+      />
 
       {(activeTab === 'reports' || activeTab === 'orders' || activeTab === 'export') && (
         <DateFilter
           currentPeriod={currentPeriod}
+          refDate={refDate}
           periodLabel={periodLabel}
+          canStepPrev={canStepPrev}
           canStepNext={canStepNext}
           isCurrentToday={isSameCalendarDay(refDate, new Date())}
+          availableMonths={availableMonths}
           onPeriodChange={handlePeriodChange}
           onStepPeriod={handleStepPeriod}
+          onSelectDate={(d) => setRefDate(d)}
           onJumpToday={() => setRefDate(new Date())}
           onCustomRangeChange={(startDate, endDate) => {
             setCustomRange({ startDate, endDate });
@@ -182,19 +257,45 @@ function MainDashboard() {
                     <SkeletonCard />
                     <SkeletonCard />
                   </div>
-                  <SkeletonChart />
-                  <SkeletonChart />
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div className="lg:col-span-8">
+                      <SkeletonChart />
+                    </div>
+                    <div className="lg:col-span-4">
+                      <SkeletonChart />
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <>
-                  <OverviewCards kpis={analytics?.kpis} />
-                  <RevenueChart dailyTrend={analytics?.dailyTrend} />
-                  <OrdersChart dailyTrend={analytics?.dailyTrend} />
-                  <PaymentBreakdown paymentBreakdown={analytics?.paymentBreakdown} />
-                  <TopSellingItems topSellingItems={analytics?.topSellingItems} />
-                  <PeakHoursChart hourlyData={analytics?.hourlyData} />
-                  <CustomerInsights customerInsights={analytics?.customerInsights} />
-                </>
+                <div className="space-y-6">
+                  <OverviewCards
+                    kpis={analytics?.kpis}
+                    customerInsights={analytics?.customerInsights}
+                  />
+
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div className="lg:col-span-8">
+                      <RevenueChart dailyTrend={analytics?.dailyTrend} />
+                    </div>
+                    <div className="lg:col-span-4">
+                      <PaymentBreakdown paymentBreakdown={analytics?.paymentBreakdown} />
+                    </div>
+
+                    <div className="lg:col-span-6">
+                      <TopSellingItems topSellingItems={analytics?.topSellingItems} />
+                    </div>
+                    <div className="lg:col-span-6">
+                      <PeakHoursChart hourlyData={analytics?.hourlyData} />
+                    </div>
+
+                    <div className="lg:col-span-6">
+                      <OrdersChart dailyTrend={analytics?.dailyTrend} />
+                    </div>
+                    <div className="lg:col-span-6">
+                      <CustomerInsights customerInsights={analytics?.customerInsights} />
+                    </div>
+                  </div>
+                </div>
               )}
             </motion.div>
           )}
@@ -235,7 +336,11 @@ function MainDashboard() {
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.25 }}
             >
-              <ExportActions analytics={analytics} settings={settings} periodLabel={periodLabel} />
+              <ExportActions
+                analytics={analytics}
+                settings={settings}
+                periodLabel={periodLabel}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -243,7 +348,7 @@ function MainDashboard() {
 
       <footer className="text-center text-xs text-slate-500 py-6 border-t border-white/10 mt-12 no-print">
         <p>
-          {settings?.businessName || 'HMB Bills'} • Futuristic Restaurant Analytics Command Hub
+          {settings?.businessName || 'HMB Bills'} • Cloud Business Dashboard
         </p>
       </footer>
     </div>
